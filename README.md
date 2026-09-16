@@ -1,36 +1,38 @@
 # nabiz
 
-Uzun işlerin nabzını tutar: build takibi, background task, bildirimler.
-Agent sahnede çalışırken ağır işler arkada yürür, bitince haber gelir.
+**English** | [Türkçe](README.tr.md)
 
-## Düzen
+Keeps the pulse of long-running work: build tracking, background tasks, notifications.
+While the agent works on stage, heavy jobs run backstage — and report back when done.
 
-- `extensions/hbmon.ts` — uzun build takibi: `hbmon_watch` / `hbmon_wait` / `hbmon_status`
-- `extensions/bg-hbmon.ts` — background task'lar: `bg_run` / `bg_status` / `bg_logs` / `bg_kill`
-  + `/bg` + `/bg-status`. hbmon daemon backend'lidir; pi restart'larını atlatır.
-- `.mcp.json` — MCP sunucuları (codegraph, bash, bm), lazy-load.
-- `docs/port-notes.md` — iç teknik notlar.
+## Layout
 
-## Kullanım
+- `extensions/hbmon.ts` — long build tracking: `hbmon_watch` / `hbmon_wait` / `hbmon_status`
+- `extensions/bg-hbmon.ts` — background tasks: `bg_run` / `bg_status` / `bg_logs` / `bg_kill`
+  + `/bg` + `/bg-status`. Backed by the hbmon daemon; survives pi restarts.
+- `.mcp.json` — MCP servers (codegraph, bash, bm), lazy-loaded.
+- `docs/port-notes.md` — internal technical notes.
+
+## Usage
 
 ```bash
-# hızlı test (kopyalamadan yükler)
-pi -e /root/nabiz/extensions/hbmon.ts -p "hbmon_watch ile ['sleep','5'] çalıştır, hbmon_wait ile bekle, özeti raporla"
+# quick test (loads without copying)
+pi -e /root/nabiz/extensions/hbmon.ts -p "run ['sleep','5'] with hbmon_watch, wait with hbmon_wait, report in one sentence"
 
-# kalıcı kurulum (package manifestli)
+# permanent install (package manifest)
 pi install /root/nabiz
 
-# settings.json extensions listesi:
+# settings.json extensions list:
 # ["/root/nabiz/extensions/hbmon.ts", "/root/nabiz/extensions/bg-hbmon.ts"]
 ```
 
-## Gereksinim
+## Requirements
 
-- `hbmon` ikiliği (`~/.cargo/bin/hbmon` veya `PATH`'te). Bulunamazsa extension'lar
-  kurulum ipucuyla döner: `cargo install --git https://github.com/aydemir/hbmon`.
+- The `hbmon` binary (`~/.cargo/bin/hbmon` or on `PATH`). If missing, extensions
+  return an install hint: `cargo install --git https://github.com/aydemir/hbmon`.
 
-## Doğrulama
+## Verification
 
-Gerçek `cargo build` üzerinde `watch → wait → status` akışı:
-aynı handshake, aynı `woke_on` özetleri, aynı exit eşlemesi
+`watch → wait → status` flow on a real `cargo build`:
+same handshake, same `woke_on` summaries, same exit mapping
 (0 done / 1 failed / 2 dep-missing / 124 timeout / 137 oom / 3 internal).
