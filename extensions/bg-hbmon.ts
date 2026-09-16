@@ -22,7 +22,7 @@
  * Çıktı: hbmon'un .out dosyası (upstream'in .pi/tasks/*.output karşılığı),
  * bg_logs aynı 50KB cap ile oradan okur.
  *
- * Yükleme: pi -e /root/pi-harness/extensions/bg-hbmon.ts
+ * Yükleme: pi -e /root/nabiz/extensions/bg-hbmon.ts
  * (hbmon-bg.ts ile AYNI ANDA yükleme — bu dosya onun yerini alır.)
  */
 

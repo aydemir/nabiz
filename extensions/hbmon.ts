@@ -5,7 +5,7 @@
  * plugins/lib/hbmon-tools.ts (TASK-126). Davranış birebir korunur:
  * aynı handshake, aynı özet cümleleri, aynı `until` isimleri.
  *
- * Yükleme: pi -e /root/pi-harness/extensions/hbmon.ts
+ * Yükleme: pi -e /root/nabiz/extensions/hbmon.ts
  */
 
 import { execFile } from "node:child_process";

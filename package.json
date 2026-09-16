@@ -1,7 +1,7 @@
 {
-  "name": "pi-harness",
+  "name": "nabiz",
   "version": "0.2.0",
-  "description": "Pi coding agent için hbmon + yardımcı extension'lar (opencode-plugins'in pi karşılığı)",
+  "description": "Uzun işlerin nabzını tutar: build takibi, background task, bildirimler",
   "type": "module",
   "keywords": ["pi-package"],
   "license": "MIT",

@@ -1,41 +1,36 @@
-# pi-harness
+# nabiz
 
-Pi coding agent için hbmon + yardımcı extension'lar. `opencode-plugins`'in pi karşılığı;
-opencode tarafına dokunmaz, ikisini paralel yaşatır.
+Uzun işlerin nabzını tutar: build takibi, background task, bildirimler.
+Agent sahnede çalışırken ağır işler arkada yürür, bitince haber gelir.
 
 ## Düzen
 
 - `extensions/hbmon.ts` — uzun build takibi: `hbmon_watch` / `hbmon_wait` / `hbmon_status`
-  (port kaynağı: `/root/opencode-plugins/plugins/{opencode-hbmon.ts,lib/hbmon-tools.ts}`)
-- `extensions/bg-hbmon.ts` — pi-background-tasks shell-task yüzeyinin hbmon backend'li
-  portu: `bg_run` / `bg_status` / `bg_logs` / `bg_kill` + `/bg` + `/bg-status`
-  (kaynak: `/tmp/opencode/pi-background-tasks/package/src/`). `hbmon-bg.ts` yerine geçer,
-  upstream paketle yan yana kurulmaz. Detay: `docs/port-notes.md`.
-- `.mcp.json` — MCP sunucuları (codegraph, bash, bm), `pi-mcp-adapter` üzerinden
-  lazy-load. Doğrulama: codegraph satır numaraları opencode ile birebir (118/149/195).
-- `docs/port-notes.md` — opencode→pi port kararları
+- `extensions/bg-hbmon.ts` — background task'lar: `bg_run` / `bg_status` / `bg_logs` / `bg_kill`
+  + `/bg` + `/bg-status`. hbmon daemon backend'lidir; pi restart'larını atlatır.
+- `.mcp.json` — MCP sunucuları (codegraph, bash, bm), lazy-load.
+- `docs/port-notes.md` — iç teknik notlar.
 
 ## Kullanım
 
 ```bash
 # hızlı test (kopyalamadan yükler)
-pi -e /root/pi-harness/extensions/hbmon.ts -p "hbmon_watch ile ['sleep','5'] çalıştır, hbmon_wait ile bekle, özeti raporla"
+pi -e /root/nabiz/extensions/hbmon.ts -p "hbmon_watch ile ['sleep','5'] çalıştır, hbmon_wait ile bekle, özeti raporla"
 
 # kalıcı kurulum (package manifestli)
-pi install /root/pi-harness
+pi install /root/nabiz
 
-# bg-hbmon, ~/.pi/agent/extensions/hbmon-bg.ts yerine geçer — ikisini aynı anda yükleme.
-# Eski dosya kaldırıldıktan sonra settings.json extensions listesi:
-# ["/root/pi-harness/extensions/hbmon.ts", "/root/pi-harness/extensions/bg-hbmon.ts"]
+# settings.json extensions listesi:
+# ["/root/nabiz/extensions/hbmon.ts", "/root/nabiz/extensions/bg-hbmon.ts"]
 ```
+
+## Gereksinim
+
+- `hbmon` ikiliği (`~/.cargo/bin/hbmon` veya `PATH`'te). Bulunamazsa extension'lar
+  kurulum ipucuyla döner: `cargo install --git https://github.com/aydemir/hbmon`.
 
 ## Doğrulama
 
-Faz 1: gerçek `cargo build` üzerinde `watch → wait → status` akışı, opencode'daki
-davranışla birebir (aynı handshake, aynı `woke_on` özetleri). Karşılaştırma ölçütü [docs/port-notes.md](docs/port-notes.md)'tedir.
-
-## İlişkiler
-
-- `hbmon` (Rust daemon, `/root/hbmon` + `~/.cargo/bin/hbmon`): değişmez, tek kaynak.
-- `opencode-plugins` (`/root/opencode-plugins`): opencode tarafı yaşamaya devam eder;
-  buradaki her portun karşılığı port-notes'ta listelenir, birebir silinmez.
+Gerçek `cargo build` üzerinde `watch → wait → status` akışı:
+aynı handshake, aynı `woke_on` özetleri, aynı exit eşlemesi
+(0 done / 1 failed / 2 dep-missing / 124 timeout / 137 oom / 3 internal).
