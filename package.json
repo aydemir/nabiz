@@ -1,7 +1,7 @@
 {
   "name": "nabiz",
   "version": "0.2.0",
-  "description": "Uzun işlerin nabzını tutar: build takibi, background task, bildirimler",
+  "description": "Keeps the pulse of long-running work: build tracking, background tasks, notifications",
   "type": "module",
   "keywords": ["pi-package"],
   "license": "MIT",
