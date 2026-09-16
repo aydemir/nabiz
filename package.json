@@ -1,0 +1,17 @@
+{
+  "name": "pi-harness",
+  "version": "0.2.0",
+  "description": "Pi coding agent için hbmon + yardımcı extension'lar (opencode-plugins'in pi karşılığı)",
+  "type": "module",
+  "keywords": ["pi-package"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./extensions"]
+  }
+}
