@@ -10,11 +10,18 @@ While the agent works on stage, heavy jobs run backstage — and report back whe
 ## Layout
 
 - `extensions/hbmon.ts` — long build tracking: `hbmon_watch` / `hbmon_wait` / `hbmon_status`
+  (engine imported from `nabiz-core`; pi wrappers only)
 - `extensions/bg-hbmon.ts` — background tasks: `bg_run` / `bg_status` / `bg_logs` / `bg_kill`
   + `/bg` + `/bg-status`. Backed by the hbmon daemon; survives pi restarts.
+  `bg_logs` supports cursor reads (`offset`/`next_offset`) and blocking reads
+  (`wait_ms`, cap 30000); task registry persists in `~/.pi/bg-hbmon-registry.json`.
 - `.mcp.json` — MCP servers (codegraph, bash, bm), lazy-loaded.
-- `docs/port-notes.md` — internal technical notes.
-- `docs/migration-plan.md` — opencode-plugins → monorepo migration plan.
+- `assets/nabiz-mark.svg` — project mark.
+- `docs/port-notes.md` — internal technical notes (opencode → pi port + Faz 3).
+- `docs/migration-plan.md` — opencode-plugins → monorepo migration plan (Faz 1–3
+  done, Faz 4 partial — see `docs/decisions.md`).
+- `docs/decisions.md` — decision log (moved from opencode-plugins in Faz 4).
+- `tasks/` — extension-layer task board (NABIZ-001…003, all done).
 - `packages/core/` — shared host-independent engine (`nabiz-core`: hbmon
   client, bg-tasks, prune, notice/disclosure texts). No host imports.
 - `packages/harness-opencode/` — opencode adapter (`nabiz-opencode`:
@@ -31,6 +38,9 @@ pi install /root/nabiz
 
 # settings.json extensions list:
 # ["/root/nabiz/extensions/hbmon.ts", "/root/nabiz/extensions/bg-hbmon.ts"]
+
+# workspaces: install links + build the shared engine
+npm install && npm run build
 ```
 
 ## Requirements
@@ -43,3 +53,5 @@ pi install /root/nabiz
 `watch → wait → status` flow on a real `cargo build`:
 same handshake, same `woke_on` summaries, same exit mapping
 (0 done / 1 failed / 2 dep-missing / 124 timeout / 137 oom / 3 internal).
+`tsc --noEmit` clean for `extensions/` (against `nabiz-core` sources);
+live daemon smoke for `bg_*` (cursor / registry / `wait_ms`).

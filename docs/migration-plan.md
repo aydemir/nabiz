@@ -1,5 +1,8 @@
 # Migrasyon planı: opencode-plugins → nabiz monorepo
 
+> Statü (2026-09-24): Faz 1 ✓ · Faz 2 ✓ · Faz 3 ✓ · Faz 4 kısmi
+> (`docs/decisions.md` taşındı, README yönlendirmesi push'landı, repo arşivi bekliyor).
+
 Karar: `docs/decisions.md` (2026-09-24 04:37) — tek repo `aydemir/nabiz`,
 harness başına ayrı paket + paylaşılan core; hbmon daemon ayrı repoda kalır.
 Marka: pi harness = `nabız`.
@@ -22,7 +25,7 @@ Kök `package.json` pi paketidir (`pi.extensions: ["./extensions"]` korunur);
 üzerine `"workspaces": ["packages/*"]` eklenir. Paket adları: `nabiz-core`,
 `nabiz-opencode` (pi paketi kökte `nabiz` olarak kalır).
 
-## Faz 1 — core (bu faz)
+## Faz 1 — core (bitti ✓)
 
 1. `packages/core/{package.json,tsconfig.json,src/*.ts}` iskeleti.
 2. `opencode-plugins/plugins/lib/*.ts` (9 dosya) → `packages/core/src/` (kopya;
@@ -31,7 +34,7 @@ Kök `package.json` pi paketidir (`pi.extensions: ["./extensions"]` korunur);
    `@earendil-works/pi-coding-agent` importu YASAK (grep gate).
 4. `tsc` build temiz.
 
-## Faz 2 — harness-opencode
+## Faz 2 — harness-opencode (bitti ✓)
 
 1. `opencode-plugins/plugins/{6 plugin + server.ts}` →
    `packages/harness-opencode/src/`; `./lib/*.js` importları `nabiz-core`'a çevrilir.
@@ -43,18 +46,24 @@ Kök `package.json` pi paketidir (`pi.extensions: ["./extensions"]` korunur);
    bg hızlı 8/8, mcp-shell 2/2) + `setup --check` temiz.
 6. opencode getLegacyPlugins kuralı korunur (barrel sadece function export).
 
-## Faz 3 — pi core'a bağlanır (sonra)
+## Faz 3 — pi core'a bağlanır (bitti ✓ 2026-09-24)
 
-`extensions/hbmon.ts` + `bg-hbmon.ts` içindeki kopya motor
-(`runHbmon`, `summarizeWait`, handshake — bkz `docs/port-notes.md` Faz 1/2)
-`nabiz-core` importuna çevrilir. Davranış testi: aynı handshake/özet/exit
-haritası (canlı daemon smoke). `port-notes.md` güncellenir.
+`extensions/hbmon.ts` motoru (`runHbmon`, `watchBuild`, `waitBuild`,
+`statusBuild`, `summarizeWait`) `nabiz-core/hbmon-tools`'tan geliyor (286→106
+satır); `bg-hbmon.ts` özdeş yardımcıları (`outFromSock`, `formatCursorReceipt`,
+`createOffsetTracker`) `nabiz-core/bg-tasks`'tan alıyor. Bilinçli yerel
+kalanlar: `readOffset`, `mapState`, `exitFromLogFile`, registry (NABIZ-002),
+wait döngüsü (NABIZ-003) — gerekçeler `docs/port-notes.md` Faz 3'te.
+Doğrulama: `tsc --noEmit` temiz + mock-pi canlı smoke 13/13.
 
-## Faz 4 — arşiv (son)
+## Faz 4 — arşiv (kısmi: yönlendirme push'landı, arşiv bekliyor)
 
-1. `docs/decisions.md` nabız'a taşınır (marka + yapı kararları dahil).
-2. opencode-plugins README'sine yönlendirme (`→ aydemir/nabiz/packages/harness-opencode`),
-   repo arşivlenir. `index.json`/`tasks/` history için salt-okunur kalır.
+1. `docs/decisions.md` nabız'a taşındı ✓ (marka + yapı kararları dahil;
+   kaynaktaki 3 kayıt `opencode-plugins@13a0fa1` ile doğrulandı).
+2. opencode-plugins README'sine yönlendirme ✓ push'landı (`f136026`,
+   `→ aydemir/nabiz/packages/harness-opencode`); repo arşivi ⏳ bekliyor
+   (ağaç kirli olduğu için ertelendi). `index.json`/`tasks/` history için
+   salt-okunur kalır.
 
 ## Kurallar
 

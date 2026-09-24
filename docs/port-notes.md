@@ -15,6 +15,10 @@
    `hbmon wait` 65sn'ye kadar bloklanır. Kanıtlanmış `runHbmon` (execTimeoutMs +
    startupGrace retry + `summarizeWait`) aynen taşındı. Takip: `pi.exec` timeout'u
    doğrulanırsa engine sadeleşir.
+   (2026-09-24 güncellemesi: `bg-hbmon.ts` NABIZ-003 `pi.exec` ile dilimli
+   `hbmon wait` çağırıyor (`(dilim+15)sn` exec tavanı) — pratikte doğrulandı,
+   ama `hbmon.ts` motoru Faz 3'te core'un `execFile` tabanlı `runHbmon`'una
+   bağlandığı için bu ayrım korunuyor.)
 2. **Özet cümlesi korundu**: context'e giren tek satır (`done code=0 in 38.5s`,
    `woke_on=dep_missing …`) opencode ile birebir aynı — ajan davranışı değişmez.
 3. **`until` kanonik isimleri değişmez**: `done failed dep_missing timeout
@@ -50,6 +54,11 @@ Bilinçli kararlar:
   isimleri çakışır. Aynı şekilde `hbmon-bg.ts` ile aynı anda yükleme (yerini alır).
 - Doğrulama: `tsc --noEmit` temiz + canlı daemon smoke (watch/handshake,
   `status --compact` state/code, `.out` içerik, `kill`, `list` adopt şekli).
+- NABIZ ekleri (board bitti, `tasks/`): NABIZ-001 `bg_logs` cursor
+  (`offset`/`next_offset` + tekrar uyarısı), NABIZ-002 registry persist
+  (`~/.pi/bg-hbmon-registry.json`, `0600`, atomik yazım), NABIZ-003 `bg_logs`
+  `wait_ms` (dilimli daemon `wait` + `.out` büyüme kontrolü; daemon yeni
+  çıktıda uyanmaz — ölçüldü).
 
 ## Faz 3 — pi core'a bağlandı (2026-09-24)
 
