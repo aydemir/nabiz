@@ -16,6 +16,6 @@
     "@earendil-works/pi-coding-agent": "*"
   },
   "pi": {
-    "extensions": ["./extensions"]
+    "extensions": ["./extensions/hbmon.ts", "./extensions/bg-hbmon.ts"]
   }
 }

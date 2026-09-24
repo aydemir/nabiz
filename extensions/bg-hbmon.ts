@@ -1,6 +1,11 @@
 /**
- * bg-hbmon — pi-background-tasks (v2.5.0, ismailsaleekh) shell-task yüzeyinin
+ * bg-hbmon — pi-background-tasks (v2.6.0, ismailsaleekh) shell-task yüzeyinin
  * hbmon daemon backend'li full portu.
+ *
+ * v2.6.1: renkli TUI renderer kaldırıldı (eski sade görünüme dönüş).
+ * Bildirim düz <background-task-notification> XML + customType olarak akar.
+ * Toast seviyesi korunur: completed→info, killed→warning, failed→error.
+ *
  *
  * Ne port edildi (kullanıcı-görünür sözleşme birebir):
  * - Tool'lar: bg_run / bg_status / bg_logs / bg_kill (aynı isim, aynı parametreler,
@@ -285,7 +290,8 @@ async function notifyCompletion(pi: ExtensionAPI, task: HbTask): Promise<void> {
 		.filter(Boolean)
 		.join("\n");
 	try {
-		uiRef?.notify(`bg: ${name} → ${task.status} (exit ${task.exitCode ?? "?"}, ${secs}s)`, task.status === "completed" ? "info" : "warning");
+		const level = task.status === "completed" ? "info" : task.status === "killed" ? "warning" : "error";
+		uiRef?.notify(`bg: ${name} → ${task.status} (exit ${task.exitCode ?? "?"}, ${secs}s)`, level);
 	} catch {
 		// UI yok — aşağıdaki mesaj yine ulaşır
 	}
