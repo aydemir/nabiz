@@ -3,8 +3,22 @@
   "version": "0.2.0",
   "description": "Keeps the pulse of long-running work: build tracking, background tasks, notifications",
   "type": "module",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "packages/harness-opencode/plugins/mcp-bash-tools"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:core": "npm run build --workspace nabiz-core"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^5.6.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/aydemir/nabiz.git"
@@ -16,6 +30,9 @@
     "@earendil-works/pi-coding-agent": "*"
   },
   "pi": {
-    "extensions": ["./extensions/hbmon.ts", "./extensions/bg-hbmon.ts"]
+    "extensions": [
+      "./extensions/hbmon.ts",
+      "./extensions/bg-hbmon.ts"
+    ]
   }
 }

@@ -29,7 +29,7 @@ pi install /root/nabiz
 ## Gereksinim
 
 - `hbmon` ikiliği (`~/.cargo/bin/hbmon` veya `PATH`'te). Bulunamazsa extension'lar
-  kurulum ipucuyla döner: `cargo install --git https://github.com/aydemir/hbmon`.
+  kurulum ipucuyla döner: `cargo install hbmon`.
 
 ## Doğrulama
 

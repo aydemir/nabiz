@@ -1,10 +1,10 @@
 ---
 id: NABIZ-001
 title: "bg_logs cursor protokolü (offset/next_offset/truncated) + tekrar-okuma uyarısı"
-status: todo
+status: done
 priority: P1
 created: 2026-09-23
-updated: 2026-09-23
+updated: 2026-09-24
 labels: [bg-hbmon, context-economy]
 depends_on: []
 ---
@@ -83,6 +83,38 @@ mümkün olur, gereksiz tekrar biter.
 ## Etkilenen Dosyalar
 
 - `extensions/bg-hbmon.ts` (`bg_logs` tool + okuma yardımcısı)
+- `packages/core/src/bg-tasks.ts` (`readOutCursor` + `formatCursorReceipt` + `createOffsetTracker`)
+- `packages/harness-opencode/plugins/opencode-hbmon.ts` (`bg_logs` offset dalı + `bg_kill` forget)
+- `packages/harness-opencode/tests/bg-tasks.test.mjs` (cursor + tracker + makbuz + plugin testleri)
+
+## Uygulama notu (2026-09-24, core-first sapma)
+
+Spec pi-local helper öngörüyordu (`readOffset` yanında `readBounded`); onun
+yerine mantık **core'a** yazıldı (`readOutCursor`, `formatCursorReceipt`,
+`createOffsetTracker` — `nabiz-core/bg-tasks`), opencode doğrudan core'dan
+tüketiyor. Gerekçe: iki harness aynı protokolü konuşsun, Faz 3 birleştirmesi
+bedavaya gelsin. Pi tarafı spec'e sadık local implementasyon taşır
+(`readOffset` + `lastOffsetByTask` + aynı makbuz metni) çünkü pi loader'ın
+workspace importunu çözdüğü bu makinede doğrulanamıyor; Faz 3'te pi core'a
+bağlanırken dedup edilir.
+
+Doğrulanan: core `tsc` + opencode `tsc` temiz; hızlı set 149 pass/0 fail/1 skip;
+yeni cursor testleri (dilim/clamp/cap/tracker/makbuz/plugin makbuz+tekrar+tail
+regresyonu) yeşil; pi `tsc --noEmit` syntax temiz (tek hata: ortamda `typebox`
+yok — çevresel).
+Kalan: spec §6 `pi -e` canlı doğrulama (uzun komut → cursor → next_offset →
+tekrar uyarısı → offsetsiz tail regresyonu) — pi CLI olan makinede.
+
+## Canlı doğrulama (2026-09-24, WSL1 RGSX-Linux)
+
+LLM anahtarı yoktu; §6 adımları stub `pi` + GERÇEK hbmon daemon (0.2.2) ile
+birebir koşuldu (`bg_run` → 6 satırlık iş, `sleep`li): **6/6 PASS** —
+tail regresyon (eski format), cursor makbuz `offset=0 next_offset=7`,
+ilk dilim içeriği, aynı offsette `[tekrar]` uyarısı, `offset=7` artımlı
+devam (uyarısız), EOF sabitleme `(yeni çıktı yok)` + `next_offset=42`.
+Ortam: node 22, pi 0.87.1 (extension yükleme doğrulandı:
+`TOOLS:bg_run,bg_status,bg_logs,bg_kill`), hbmon 0.2.2.
+Not: pi `resolveTask` id/prefix çözer (isim değil) — test uuid-prefix kullandı.
 
 ## Doğrulama
 

@@ -1,0 +1,46 @@
+{
+  "name": "nabiz-opencode",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "nabiz opencode adaptoru: context-saver, build-tracker, truncation-noticer, cpu-liveness, settle-noticer, hbmon (tek server girisi) + MCP bash-tools",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aydemir/nabiz.git",
+    "directory": "packages/harness-opencode"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "setup": "node scripts/setup.mjs",
+    "pretest": "npm run build",
+    "test": "node --test --test-reporter=spec",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "nabiz"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@opencode-ai/plugin": "1.18.21",
+    "nabiz-core": "*"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "exports": {
+    "./server": "./dist/plugins/server.js",
+    "./opencode-build-tracker": "./dist/plugins/opencode-build-tracker.js",
+    "./opencode-context-saver": "./dist/plugins/opencode-context-saver.js",
+    "./opencode-truncation-noticer": "./dist/plugins/opencode-truncation-noticer.js",
+    "./opencode-settle-noticer": "./dist/plugins/opencode-settle-noticer.js",
+    "./opencode-hbmon": "./dist/plugins/opencode-hbmon.js",
+    "./opencode-cpu-liveness": "./dist/plugins/opencode-cpu-liveness.js"
+  },
+  "files": [
+    "dist",
+    "plugins",
+    "scripts"
+  ]
+}

@@ -13,9 +13,8 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 export const HBMON_INSTALL_HINT =
-  "hbmon bulunamadı. Kurulum (git — crates.io yayını stabil sürüme kadar " +
-  "bilinçli ertelendi): cargo install --git https://github.com/aydemir/hbmon " +
-  "(veya HBMON_BIN=/yol/hbmon)";
+  "hbmon bulunamadı. Kurulum: cargo install hbmon " +
+  "(veya HBMON_BIN=/yol/hbmon; git'ten: cargo install --git https://github.com/aydemir/hbmon)";
 
 function resolveHbmonBin(env: NodeJS.ProcessEnv = process.env): string {
   const direct = (env.HBMON_BIN ?? "").trim();

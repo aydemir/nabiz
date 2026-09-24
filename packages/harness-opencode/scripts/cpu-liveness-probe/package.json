@@ -1,0 +1,19 @@
+{
+  "name": "@opencode-plugins/cpu-liveness-probe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CPU zamanı üzerinden process liveness izleyici (probe + tree-kill + agent). Linux /proc canlı-testli; macOS/Windows okuyucuları TEST EDİLMEDİ.",
+  "main": "./cpu-liveness-probe.js",
+  "exports": {
+    ".": "./cpu-liveness-probe.js",
+    "./tree-kill": "./tree-kill.js",
+    "./agent": "./cpu-liveness-agent.js"
+  },
+  "bin": {
+    "cpu-liveness-agent": "./cpu-liveness-agent.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

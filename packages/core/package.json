@@ -1,0 +1,28 @@
+{
+  "name": "nabiz-core",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "nabiz paylasilan motoru: host-bagimsiz saf TS (hbmon client, bg-tasks, prune, notice/disclosure metinleri). opencode/pi importu YASAK.",
+  "scripts": {
+    "build": "tsc --project tsconfig.json"
+  },
+  "exports": {
+    "./bg-tasks": "./dist/bg-tasks.js",
+    "./build-tracker-disclosure": "./dist/build-tracker-disclosure.js",
+    "./cpu-liveness-disclosure": "./dist/cpu-liveness-disclosure.js",
+    "./disclosure": "./dist/disclosure.js",
+    "./hbmon-tools": "./dist/hbmon-tools.js",
+    "./prune": "./dist/prune.js",
+    "./raw-refill": "./dist/raw-refill.js",
+    "./settle-notice": "./dist/settle-notice.js",
+    "./truncation-notice": "./dist/truncation-notice.js"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

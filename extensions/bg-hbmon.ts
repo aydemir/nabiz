@@ -159,6 +159,9 @@ const EXIT_HINT: Record<string, string> = {
 };
 
 const tasks = new Map<string, HbTask>();
+// NABIZ-001 tekrar tespiti: saklanan İSTENEN offset'tir (nextOffset değil).
+// Bellekte tutulur (NABIZ-002 persist'e kadar); biten task'ta silinir.
+const lastOffsetByTask = new Map<string, number>();
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 let uiRef: ExtensionContext["ui"] | undefined;
 let currentCtx: ExtensionContext | undefined;
@@ -308,6 +311,7 @@ async function finishTask(pi: ExtensionAPI, task: HbTask, status: HbTaskStatus, 
 	task.exitCode = code;
 	if (error !== undefined) task.error = error;
 	tasks.delete(task.id);
+	lastOffsetByTask.delete(task.id);
 	refreshWidget();
 	const hint = EXIT_HINT[status] ?? "inspect and decide";
 	await notifyCompletion(pi, task);
@@ -443,6 +447,26 @@ function readBounded(outputPath: string, maxBytes: number, tail: boolean): { tex
 	}
 }
 
+// NABIZ-001 cursor okuma (readBounded YANINA — mevcut fonksiyona dokunulmadı).
+// Aralık [offset, offset+maxBytes); nextOffset = offset + okunan.
+// offset > size → cursor EOF'a sabitlenir. Negatif/NaN → 0. UTF-8 kesimi as-is.
+function readOffset(outputPath: string, offset: number, maxBytes: number): { text: string; nextOffset: number; size: number; truncated: boolean } {
+	const size = fs.statSync(outputPath).size;
+	let off = Number.isFinite(offset) ? Math.floor(offset) : 0;
+	if (off < 0) off = 0;
+	if (off > size) return { text: "", nextOffset: size, size, truncated: false };
+	const n = Math.min(maxBytes, size - off);
+	const fd = fs.openSync(outputPath, "r");
+	try {
+		const buf = Buffer.alloc(n);
+		fs.readSync(fd, buf, 0, n, off);
+		const nextOffset = off + n;
+		return { text: buf.toString("utf-8"), nextOffset, size, truncated: nextOffset < size };
+	} finally {
+		fs.closeSync(fd);
+	}
+}
+
 // --- tool parametreleri (upstream ile aynı) ---
 
 const BgRunParams = Type.Object({
@@ -463,6 +487,7 @@ const BgLogsParams = Type.Object({
 	taskId: Type.String({ description: "Task ID or unambiguous prefix" }),
 	maxBytes: Type.Optional(Type.Number({ description: `Maximum bytes to return, capped at ${formatSize(MAX_LOG_BYTES)}. Default: ${formatSize(DEFAULT_LOG_BYTES)}.` })),
 	tail: Type.Optional(Type.Boolean({ description: "Read the tail of the log when true, head when false. Default: true." })),
+	offset: Type.Optional(Type.Number({ description: "Artımlı okuma bayt konumu (önceki yanıtın next_offset'i; yoksa tail modu)" })),
 });
 
 const BgKillParams = Type.Object({
@@ -598,12 +623,13 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "bg_logs",
 		label: "Background Logs",
-		description: `Read bounded output from a background task for deliberate inspection; this is not a waiting primitive. Output is capped at ${formatSize(MAX_LOG_BYTES)} for model safety and points to the full output file when truncated.`,
+		description: `Read bounded output from a background task for deliberate inspection; this is not a waiting primitive. Output is capped at ${formatSize(MAX_LOG_BYTES)} for model safety and points to the full output file when truncated. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür.`,
 		promptSnippet: "Read bounded task output when needed; never tail it repeatedly as a wait loop",
 		promptGuidelines: [
 			"Use bg_logs with a modest maxBytes value only when task output is needed, without flooding context.",
 			"Do not repeatedly call bg_logs to wait for completion while an automatic terminal notification is pending.",
 			"Use bg_status first only when a deliberate inspection requires the current task state; do not reconfirm a terminal notification.",
+			"Artımlı okumada offset/next_offset zincirini kullan; aynı offset'i tekrar çağırma (uyarı alırsın).",
 		],
 		parameters: BgLogsParams,
 		async execute(_id, params: any) {
@@ -612,6 +638,25 @@ export default function (pi: ExtensionAPI) {
 				typeof params.maxBytes === "number" && params.maxBytes > 0 ? Math.floor(params.maxBytes) : DEFAULT_LOG_BYTES,
 				MAX_LOG_BYTES,
 			);
+			if (params.offset !== undefined) {
+				const prev = lastOffsetByTask.get(task.id);
+				lastOffsetByTask.set(task.id, params.offset);
+				const repeat = prev !== undefined && prev === params.offset;
+				let receipt: string;
+				try {
+					const r = readOffset(task.outputPath, params.offset, maxBytes);
+					const head = `[${taskDisplayName(task)} .out offset=${params.offset} next_offset=${r.nextOffset} size=${r.size}${r.truncated ? " TRUNCATED, devamı var" : ""}]`;
+					receipt = r.text === ""
+						? `${head}\n(yeni çıktı yok)`
+						: `${head}\n${r.truncated ? `(devamı için offset=${r.nextOffset} ile tekrar çağır)\n` : ""}${r.text}`;
+				} catch (err: any) {
+					receipt = `(no output yet at ${task.outputPath}: ${err?.message ?? err})`;
+				}
+				if (repeat) receipt = `[tekrar] yeni çıktı yok; bekle ya da bildirimi bekle (offset=${params.offset})\n${receipt}`;
+				return textResult(`${taskDisplayName(task)} (${shortId(task.id)}) [${task.status}] cursor:\n${receipt}`, {
+					task: snapshot(task),
+				});
+			}
 			const tail = params.tail ?? true;
 			let body: string;
 			try {
@@ -644,6 +689,7 @@ export default function (pi: ExtensionAPI) {
 				task.status = "killed";
 				task.exitCode = -1;
 				tasks.delete(task.id);
+				lastOffsetByTask.delete(task.id);
 				refreshWidget();
 				await notifyCompletion(pi, task);
 			}

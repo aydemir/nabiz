@@ -1,0 +1,21 @@
+{
+  "name": "@nabiz/mcp-bash-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server: bash_safe (auto-pruned) + bash_raw (full output) for opencode. Schema-controlled bypass.",
+  "main": "dist/server.js",
+  "bin": {
+    "opencode-mcp-bash-tools": "dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "lint": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": ">=18"
+  }
+}

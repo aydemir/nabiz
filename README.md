@@ -12,6 +12,11 @@ While the agent works on stage, heavy jobs run backstage — and report back whe
   + `/bg` + `/bg-status`. Backed by the hbmon daemon; survives pi restarts.
 - `.mcp.json` — MCP servers (codegraph, bash, bm), lazy-loaded.
 - `docs/port-notes.md` — internal technical notes.
+- `docs/migration-plan.md` — opencode-plugins → monorepo migration plan.
+- `packages/core/` — shared host-independent engine (`nabiz-core`: hbmon
+  client, bg-tasks, prune, notice/disclosure texts). No host imports.
+- `packages/harness-opencode/` — opencode adapter (`nabiz-opencode`:
+  6 plugins via single server entry + MCP bash-tools + scripts/tests).
 
 ## Usage
 
@@ -29,7 +34,7 @@ pi install /root/nabiz
 ## Requirements
 
 - The `hbmon` binary (`~/.cargo/bin/hbmon` or on `PATH`). If missing, extensions
-  return an install hint: `cargo install --git https://github.com/aydemir/hbmon`.
+  return an install hint: `cargo install hbmon`.
 
 ## Verification
 
