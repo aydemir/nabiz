@@ -1,10 +1,10 @@
 ---
 id: NABIZ-002
 title: "Task registry persist (pi restart'ında name/notify bayrakları kaybolmasın)"
-status: todo
+status: done
 priority: P1
 created: 2026-09-23
-updated: 2026-09-23
+updated: 2026-09-24
 labels: [bg-hbmon, durability]
 depends_on: []
 ---

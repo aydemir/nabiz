@@ -1,202 +1,22 @@
 /**
- * hbmon — uzun build takibi için pi extension (Faz 1).
+ * hbmon — uzun build takibi için pi extension (Faz 1 port, Faz 3 core bağlantısı).
  *
  * Port kaynağı: /root/opencode-plugins/plugins/opencode-hbmon.ts +
  * plugins/lib/hbmon-tools.ts (TASK-126). Davranış birebir korunur:
  * aynı handshake, aynı özet cümleleri, aynı `until` isimleri.
  *
+ * Faz 3: motor (runHbmon/watchBuild/waitBuild/statusBuild/summarizeWait)
+ * nabiz-core/hbmon-tools'tan gelir; bu dosyada yalnızca pi tool sarmalayıcıları
+ * (şemalar + textResult + registerTool) kalır.
+ *
  * Yükleme: pi -e /root/nabiz/extensions/hbmon.ts
  */
 
-import { execFile } from "node:child_process";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { resolveHbmonBin, statusBuild, waitBuild, watchBuild } from "nabiz-core/hbmon-tools";
 
-export const HBMON_INSTALL_HINT =
-  "hbmon bulunamadı. Kurulum: cargo install hbmon " +
-  "(veya HBMON_BIN=/yol/hbmon; git'ten: cargo install --git https://github.com/aydemir/hbmon)";
-
-function resolveHbmonBin(env: NodeJS.ProcessEnv = process.env): string {
-  const direct = (env.HBMON_BIN ?? "").trim();
-  return direct === "" ? "hbmon" : direct;
-}
-
-interface HbmonRun {
-  code: number;
-  stdout: string;
-  stderr: string;
-  json?: unknown;
-  error?: string;
-}
-
-function parseJson(text: string): unknown | undefined {
-  const t = text.trim();
-  if (t === "") return undefined;
-  try {
-    return JSON.parse(t);
-  } catch {
-    for (const line of t.split("\n")) {
-      const s = line.trim();
-      if (s.startsWith("{")) {
-        try {
-          return JSON.parse(s);
-        } catch {
-          continue;
-        }
-      }
-    }
-    return undefined;
-  }
-}
-
-/** hbmon'u çalıştır, çıktıyı topla. Shell yok — argv aynen taşınır. */
-function runHbmon(
-  bin: string,
-  args: string[],
-  execTimeoutMs = 70000,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<HbmonRun> {
-  return new Promise((resolve) => {
-    execFile(
-      bin,
-      args,
-      { encoding: "utf8", timeout: execTimeoutMs, windowsHide: true, env },
-      (err, stdout, stderr) => {
-        const out = String(stdout ?? "");
-        const errText = String(stderr ?? "");
-        if (err && typeof (err as NodeJS.ErrnoException).code === "string") {
-          if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-            resolve({ code: 127, stdout: out, stderr: errText, error: HBMON_INSTALL_HINT });
-            return;
-          }
-        }
-        const killed = !!err && (err as Error & { killed?: boolean }).killed === true;
-        const exitCode =
-          err && typeof (err as { code?: unknown }).code === "number"
-            ? (err as unknown as { code: number }).code
-            : 0;
-        resolve({
-          code: exitCode,
-          stdout: out,
-          stderr: errText,
-          json: parseJson(out),
-          ...(killed ? { error: `hbmon çağrısı zaman aşımı (${execTimeoutMs}ms)` } : {}),
-        });
-      },
-    );
-  });
-}
-
-interface WatchHandshake {
-  uuid: string;
-  sock: string;
-  log: string;
-}
-
-async function watchBuild(
-  bin: string,
-  command: string[],
-  opts: { uuid?: string; timeoutSec?: number; env?: NodeJS.ProcessEnv } = {},
-): Promise<{ handshake?: WatchHandshake; raw: HbmonRun; error?: string }> {
-  const args = ["watch", "--detach"];
-  if (opts.uuid) args.push("--uuid", opts.uuid);
-  if (opts.timeoutSec !== undefined) args.push("--timeout-sec", String(opts.timeoutSec));
-  args.push("--", ...command);
-  const raw = await runHbmon(bin, args, 30000, opts.env);
-  if (raw.error) return { raw, error: raw.error };
-  const j = raw.json as Partial<WatchHandshake> | undefined;
-  if (raw.code !== 0 || !j || typeof j.uuid !== "string" || typeof j.sock !== "string") {
-    return {
-      raw,
-      error: `hbmon watch başarısız (exit ${raw.code}): ${(raw.stderr || raw.stdout).trim().slice(0, 300)}`,
-    };
-  }
-  return {
-    handshake: { uuid: j.uuid, sock: j.sock, log: typeof j.log === "string" ? j.log : "" },
-    raw,
-  };
-}
-
-interface WaitResult {
-  response?: unknown;
-  summary: string;
-  error?: string;
-}
-
-async function waitBuild(
-  bin: string,
-  sock: string,
-  opts: { timeoutSec?: number; until?: string; env?: NodeJS.ProcessEnv; startupGraceMs?: number } = {},
-): Promise<WaitResult> {
-  const daemonTimeout = opts.timeoutSec ?? 50;
-  const args = ["wait", "--sock", sock, "--timeout", String(daemonTimeout)];
-  if (opts.until) args.push("--until", opts.until);
-  const execMs = (daemonTimeout + 15) * 1000;
-  const deadline = Date.now() + (opts.startupGraceMs ?? 10000);
-  let raw = await runHbmon(bin, args, execMs, opts.env);
-  while (!raw.json && isConnectionError(raw) && Date.now() < deadline) {
-    await sleep(250);
-    raw = await runHbmon(bin, args, execMs, opts.env);
-  }
-  if (raw.error) return { summary: raw.error, error: raw.error };
-  const r = raw.json as Record<string, unknown> | undefined;
-  if (!r || typeof r !== "object") {
-    return { summary: `hbmon wait parse edilemedi (exit ${raw.code})`, error: "bad json" };
-  }
-  return { response: r, summary: summarizeWait(r, raw.code) };
-}
-
-function str(v: unknown): string {
-  return typeof v === "string" ? v : "";
-}
-
-function isConnectionError(raw: HbmonRun): boolean {
-  if (raw.code !== 3) return false;
-  const text = `${raw.stderr}\n${raw.stdout}`;
-  return /pipe (wait|connect)|connect /i.test(text);
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-function num(v: unknown): number | undefined {
-  return typeof v === "number" ? v : undefined;
-}
-
-function summarizeWait(r: Record<string, unknown>, exitCode: number): string {
-  const woke = str(r.woke_on);
-  const state = str(r.state);
-  const code = num(r.code) ?? exitCode;
-  const dur = num(r.duration_sec);
-  const durText = dur === undefined ? "" : ` in ${dur.toFixed(1)}s`;
-  if (r.timeout === true) return `timeout (hâlâ çalışıyor)${durText} — tekrar hbmon_wait çağır`;
-  if (woke && (state === "running" || state === "stalled") && r.code === undefined) {
-    return `woke_on=${woke} state=${state}${durText} — hbmon_status ile detaya bak`;
-  }
-  if (state === "done") return `done code=${code}${durText}`;
-  if (state === "dep_missing") return `dep_missing (exit 2)${durText} — log'a bak, bitmesini bekleme`;
-  if (state === "failed") return `failed code=${code}${durText}`;
-  if (state !== "") return `${state} code=${code}${durText}`;
-  return `wait exit=${exitCode}${durText}`;
-}
-
-async function statusBuild(
-  bin: string,
-  sock: string,
-  env: NodeJS.ProcessEnv = process.env,
-  startupGraceMs = 10000,
-): Promise<{ response?: unknown; error?: string }> {
-  let raw = await runHbmon(bin, ["status", "--sock", sock], 30000, env);
-  const deadline = Date.now() + startupGraceMs;
-  while (!raw.json && isConnectionError(raw) && Date.now() < deadline) {
-    await sleep(250);
-    raw = await runHbmon(bin, ["status", "--sock", sock], 30000, env);
-  }
-  if (raw.error) return { error: raw.error };
-  if (!raw.json || typeof raw.json !== "object") {
-    return { error: `hbmon status parse edilemedi (exit ${raw.code})` };
-  }
-  return { response: raw.json };
-}
+// (motor: nabiz-core/hbmon-tools — HbmonRun/runHbmon/watchBuild/waitBuild/summarizeWait/statusBuild)
 
 // --- pi extension ---
 

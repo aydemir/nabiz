@@ -50,3 +50,33 @@ Bilinçli kararlar:
   isimleri çakışır. Aynı şekilde `hbmon-bg.ts` ile aynı anda yükleme (yerini alır).
 - Doğrulama: `tsc --noEmit` temiz + canlı daemon smoke (watch/handshake,
   `status --compact` state/code, `.out` içerik, `kill`, `list` adopt şekli).
+
+## Faz 3 — pi core'a bağlandı (2026-09-24)
+
+`extensions/hbmon.ts`: ~180 satırlık kopya motor silindi;
+`runHbmon/watchBuild/waitBuild/statusBuild` (+ `resolveHbmonBin`) artık
+`nabiz-core/hbmon-tools`'tan geliyor. Kopya core'un alt kümesiydi
+(win32 `.cmd` shim'i ve `watchBuild` `label` opsiyonu yalnızca core'da var) —
+davranış linux'ta birebir, win32'de strictly-better. Dosya 286→106 satır;
+kalan yalnızca pi sarmalayıcıları (Type şemaları + textResult + registerTool).
+
+`extensions/bg-hbmon.ts`: özdeş 3 yardımcı core'a bağlandı —
+`outFromSock` (eski `outPathFor`), `formatCursorReceipt` (makbuz metni
+byte-identical), `createOffsetTracker` (tekrar takibi). Bilinçli YEREL
+kalanlar: `readOffset` (dosya-yok metni ext'e özel), `mapState` (`timeout`
+eşlemesi core `isTerminalState`'te yok), `exitFromLogFile` (`ev:"exit"`
+filtresi core `readLastEvent`'ten farklı), `firstJsonLine`, registry
+(NABIZ-002: tek-dosya `~/.pi` — core sidecar `bg-<uuid>.json` tasarımından
+farklı, birleştirme ayrı karar), wait döngüsü (NABIZ-003: core'da karşılığı
+yok, yalnızca `waitBuild` primitifi var).
+
+Altyapı: root `npm install` (workspace linkleri) + `nabiz-core` build (`dist/`);
+extension'lar `nabiz-core/<modül>` alt-yol importu kullanır (pakette `.`
+exportu yok). `typebox` root `node_modules`'a symlinklendi (pi loader'ı
+kendi çözümlemesini yapar; symlink yalnızca yerel `tsc`/test içindir,
+`node_modules` gitignore'lıdır).
+
+Doğrulama: `tsc --noEmit` (extensions, core kaynaklarına karşı) temiz +
+mock-pi canlı smoke 13/13 (watch/handshake, `done code=0 in 3.5s` özeti,
+status, bg_run/bg_status/bg_logs tail+cursor+tekrar, registry yazımı,
+wait_ms). Beklemesiz `bg_logs` çıktıları byte-identical korundu.

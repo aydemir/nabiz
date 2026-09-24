@@ -1,10 +1,10 @@
 ---
 id: NABIZ-003
 title: "bg_logs wait_ms (hbmon wait reuse ile bloklayan okuma)"
-status: todo
+status: done
 priority: P2
 created: 2026-09-23
-updated: 2026-09-23
+updated: 2026-09-24
 labels: [bg-hbmon, polling]
 depends_on: [NABIZ-001]
 ---

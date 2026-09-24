@@ -1,5 +1,7 @@
 # nabiz
 
+<img src="assets/nabiz-mark.svg" width="96" alt="nabız logo">
+
 **English** | [Türkçe](README.tr.md)
 
 Keeps the pulse of long-running work: build tracking, background tasks, notifications.

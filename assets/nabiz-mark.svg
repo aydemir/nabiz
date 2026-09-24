@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="nabız">
+  <title>nabız — uzun işlerin nabzını tutar</title>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="#0f172a"/>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="none" stroke="#334155" stroke-width="4"/>
+  <polyline points="32,136 92,136 106,136 116,100 132,172 142,118 150,136 224,136"
+    fill="none" stroke="#f43f5e" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="224" cy="136" r="10" fill="#f43f5e"/>
+</svg>

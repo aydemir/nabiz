@@ -32,8 +32,21 @@
  */
 
 import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+// Faz 3: host-bağımsız yardımcılar nabiz-core/bg-tasks'tan.
+// Yerel kalanlar (bilinçli): readOffset (dosya-yok metni ext'e özel),
+// mapState (timeout eşlemesi core'da yok), exitFromLogFile (ev:exit filtresi
+// core readLastEvent'ten farklı), firstJsonLine, registry (NABIZ-002:
+// tek-dosya ~/.pi — core sidecar tasarımından farklı), wait döngüsü (NABIZ-003).
+import {
+  createOffsetTracker,
+  formatCursorReceipt,
+  outFromSock,
+  type OffsetTracker,
+} from "nabiz-core/bg-tasks";
 
 // --- upstream common.ts'tan aynen alınan sabitler/yardımcılar ---
 
@@ -160,19 +173,140 @@ const EXIT_HINT: Record<string, string> = {
 
 const tasks = new Map<string, HbTask>();
 // NABIZ-001 tekrar tespiti: saklanan İSTENEN offset'tir (nextOffset değil).
-// Bellekte tutulur (NABIZ-002 persist'e kadar); biten task'ta silinir.
-const lastOffsetByTask = new Map<string, number>();
+// Bellekte tutulur (bilinçli: cursor NABIZ-002 persist KAPSAMINDA DEĞİL;
+// restart'ta sıfırlanır); biten task'ta silinir. Motor core'dan.
+const offsetTracker: OffsetTracker = createOffsetTracker();
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 let uiRef: ExtensionContext["ui"] | undefined;
 let currentCtx: ExtensionContext | undefined;
+
+// --- NABIZ-002 registry persist (restart durability) ---
+// Konum GLOBAL: ~/.pi/bg-hbmon-registry.json (sock'lar tmpdir'da global,
+// adoptOrphans global çalışır; proje-dizini olsaydı cross-cwd adopt kırılırdı).
+// Homedir çözülemezse fallback os.tmpdir(). Dosya 0600, yazım atomik (tmp+rename).
+// Persist = ÇALIŞAN task'lar; bitenler finishTask ile Map'ten + dosyadan düşer.
+// status YAZILMAZ — açılışta yeniden türetilir (hbmon'da yoksa failed/socket gone).
+
+interface RegistryEntry {
+	id: string;
+	name: string;
+	command: string;
+	sock: string;
+	logPath: string;
+	outputPath: string;
+	cwd: string;
+	startedAt: number;
+	notifyOnCompletion: boolean;
+	triggerOnCompletion: boolean;
+	notified: boolean;
+}
+
+function registryPath(): string {
+	try {
+		const home = os.homedir();
+		if (home) return path.join(home, ".pi", "bg-hbmon-registry.json");
+	} catch {
+		// fallback aşağıda
+	}
+	return path.join(os.tmpdir(), "bg-hbmon-registry.json");
+}
+
+function toRegistry(t: HbTask): RegistryEntry {
+	return {
+		id: t.id,
+		name: t.name,
+		command: t.command,
+		sock: t.sock,
+		logPath: t.logPath,
+		outputPath: t.outputPath,
+		cwd: t.cwd,
+		startedAt: t.startedAt,
+		notifyOnCompletion: t.notifyOnCompletion,
+		triggerOnCompletion: t.triggerOnCompletion,
+		notified: t.notified,
+	};
+}
+
+function saveRegistry(): void {
+	try {
+		const file = registryPath();
+		try {
+			fs.mkdirSync(path.dirname(file), { recursive: true });
+		} catch {
+			// dizin zaten var
+		}
+		const tmp = `${file}.${process.pid}.tmp`;
+		fs.writeFileSync(tmp, JSON.stringify([...tasks.values()].map(toRegistry), null, 2), "utf-8");
+		try {
+			fs.chmodSync(tmp, 0o600);
+		} catch {
+			// chmod desteklenmiyorsa devam
+		}
+		fs.renameSync(tmp, file);
+		try {
+			fs.chmodSync(file, 0o600);
+		} catch {
+			// best-effort
+		}
+	} catch {
+		// persist best-effort — bellek-içi Map her zaman doğruluk kaynağı
+	}
+}
+
+function isRegistryEntry(v: any): v is RegistryEntry {
+	return (
+		!!v &&
+		typeof v.id === "string" &&
+		typeof v.sock === "string" &&
+		typeof v.name === "string" &&
+		typeof v.command === "string" &&
+		typeof v.logPath === "string" &&
+		typeof v.outputPath === "string" &&
+		typeof v.cwd === "string" &&
+		typeof v.startedAt === "number"
+	);
+}
+
+/** Tolerant yükleme: bozuk/eksik dosya → boş Map + uyarı yok (crash asla yok). */
+function loadRegistry(): Map<string, RegistryEntry> {
+	const out = new Map<string, RegistryEntry>();
+	let raw: string;
+	try {
+		raw = fs.readFileSync(registryPath(), "utf-8");
+	} catch {
+		return out; // dosya yok — sıfırdan açılış
+	}
+	let parsed: any;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return out; // bozuk dosya — crash yok
+	}
+	if (!Array.isArray(parsed)) return out;
+	for (const e of parsed) {
+		if (!isRegistryEntry(e)) continue; // kaydı atla, dosyayı silme
+		out.set(e.id, {
+			id: e.id,
+			name: e.name,
+			command: e.command,
+			sock: e.sock,
+			logPath: e.logPath,
+			outputPath: e.outputPath,
+			cwd: e.cwd,
+			startedAt: e.startedAt,
+			notifyOnCompletion: e.notifyOnCompletion ?? true,
+			triggerOnCompletion: e.triggerOnCompletion ?? true,
+			notified: e.notified ?? false,
+		});
+	}
+	return out;
+}
 
 function shortId(id: string): string {
 	return id.slice(0, 8);
 }
 
-function outPathFor(sock: string): string {
-	return sock.replace(/\.sock$/, ".out");
-}
+// (outPathFor → core outFromSock; davranış aynı: .sock→.out)
 
 function snapshot(t: HbTask) {
 	return {
@@ -272,6 +406,7 @@ function formatSnapshotList(all: HbTask[]): string {
 async function notifyCompletion(pi: ExtensionAPI, task: HbTask): Promise<void> {
 	if (!task.notifyOnCompletion || task.notified) return;
 	task.notified = true;
+	saveRegistry(); // restart-arası çift-bildirimi engeller
 	const secs = Math.round((Date.now() - task.startedAt) / 1000);
 	const name = taskDisplayName(task);
 	const guidance =
@@ -311,7 +446,8 @@ async function finishTask(pi: ExtensionAPI, task: HbTask, status: HbTaskStatus, 
 	task.exitCode = code;
 	if (error !== undefined) task.error = error;
 	tasks.delete(task.id);
-	lastOffsetByTask.delete(task.id);
+	offsetTracker.forget(task.id);
+	saveRegistry(); // biten registry'den de düşer
 	refreshWidget();
 	const hint = EXIT_HINT[status] ?? "inspect and decide";
 	await notifyCompletion(pi, task);
@@ -357,7 +493,7 @@ async function pollOnce(pi: ExtensionAPI): Promise<void> {
 	refreshWidget();
 }
 
-async function adoptOrphans(pi: ExtensionAPI): Promise<number> {
+async function adoptOrphans(pi: ExtensionAPI, reg?: Map<string, RegistryEntry>): Promise<number> {
 	let out;
 	try {
 		out = await pi.exec("hbmon", ["list"], { timeout: 10_000 });
@@ -399,6 +535,29 @@ async function adoptOrphans(pi: ExtensionAPI): Promise<number> {
 		} catch {
 			// varsayılanlar
 		}
+		const saved = reg?.get(uuid);
+		if (saved) {
+			// live + registry VAR → registry metadata'sıyla set (adopt'un üstüne YAZAR)
+			tasks.set(uuid, {
+				id: uuid,
+				name: saved.name,
+				command: saved.command,
+				isAgent: false,
+				status: "running",
+				exitCode: null,
+				sock: saved.sock,
+				logPath: saved.logPath,
+				outputPath: saved.outputPath,
+				cwd: saved.cwd,
+				startedAt: saved.startedAt,
+				notified: saved.notified,
+				notifyOnCompletion: saved.notifyOnCompletion,
+				triggerOnCompletion: saved.triggerOnCompletion,
+				misses: 0,
+			});
+			added += 1;
+			continue;
+		}
 		tasks.set(uuid, {
 			id: uuid,
 			name: deriveTaskNameFromCommand(cmd),
@@ -408,7 +567,7 @@ async function adoptOrphans(pi: ExtensionAPI): Promise<number> {
 			exitCode: null,
 			sock,
 			logPath: log,
-			outputPath: outPathFor(sock),
+			outputPath: outFromSock(sock),
 			cwd: currentCtx?.cwd ?? process.cwd(),
 			startedAt,
 			notified: false,
@@ -467,6 +626,64 @@ function readOffset(outputPath: string, offset: number, maxBytes: number): { tex
 	}
 }
 
+// --- NABIZ-003 bloklayan okuma (hbmon wait reuse) ---
+// Daemon wait'i terminal durumda uyandırır ama yeni çıktıda UYANMAZ
+// (kanıt: 24.09 — MERHABA çıktısına rağmen 12s timeout). Bu yüzden dilimli
+// bekleme: her dilim daemon'da bloklanır (busy-poll YOK), dilim aralarında
+// .out büyümesi kontrol edilir → yeni bayt/terminalde erken dön.
+
+const WAIT_CAP_MS = 30000;
+const WAIT_SLICE_MS = 2000;
+
+function outFileSize(outputPath: string): number | undefined {
+	try {
+		return fs.statSync(outputPath).size;
+	} catch {
+		return undefined; // henüz çıktı yok
+	}
+}
+
+/**
+ * Tek task için hafif terminal tazeleme (bg_logs içi — salt-görünüm).
+ * pollOnce'tan farklı: silme/bildirim/persist YOK, yalnızca status/exitCode
+ * alanları güncellenir. Dönüş: terminal mi?
+ */
+async function refreshOneTask(pi: ExtensionAPI, task: HbTask): Promise<boolean> {
+	let res;
+	try {
+		res = await pi.exec("hbmon", ["status", "--sock", task.sock, "--compact"], { timeout: 10_000 });
+	} catch {
+		res = undefined;
+	}
+	if (res && res.code === 0) {
+		try {
+			const st = JSON.parse(res.stdout);
+			const state = String(st.state ?? "unknown");
+			const code = Number(st.code ?? -1);
+			if (["done", "failed", "dep_missing", "timeout"].includes(state)) {
+				const m = mapState(state, code);
+				task.status = m.status;
+				task.exitCode = code;
+				if (m.error !== undefined) task.error = m.error;
+				return true;
+			}
+			return false;
+		} catch {
+			return false;
+		}
+	}
+	// Stale sock → .jsonl'deki exit event'e bak (poller finish'i devralır).
+	const exit = exitFromLogFile(task.logPath);
+	if (exit) {
+		const m = mapState(exit.state, exit.code);
+		task.status = m.status;
+		task.exitCode = exit.code;
+		if (m.error !== undefined) task.error = m.error;
+		return true;
+	}
+	return false;
+}
+
 // --- tool parametreleri (upstream ile aynı) ---
 
 const BgRunParams = Type.Object({
@@ -488,6 +705,7 @@ const BgLogsParams = Type.Object({
 	maxBytes: Type.Optional(Type.Number({ description: `Maximum bytes to return, capped at ${formatSize(MAX_LOG_BYTES)}. Default: ${formatSize(DEFAULT_LOG_BYTES)}.` })),
 	tail: Type.Optional(Type.Boolean({ description: "Read the tail of the log when true, head when false. Default: true." })),
 	offset: Type.Optional(Type.Number({ description: "Artımlı okuma bayt konumu (önceki yanıtın next_offset'i; yoksa tail modu)" })),
+	wait_ms: Type.Optional(Type.Number({ description: "Bloklayan okuma: yeni çıktı veya terminal durum gelene kadar en fazla bu kadar ms bekle (cap 30000, aşım kırpılır). Mevcut çıktı/terminal varsa hemen döner. Vermezsen/0 ise beklemez." })),
 });
 
 const BgKillParams = Type.Object({
@@ -502,12 +720,38 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		currentCtx = ctx as ExtensionContext;
 		if ((ctx as ExtensionContext).hasUI) uiRef = (ctx as ExtensionContext).ui;
+		// NABIZ-002 init birleşimi: önce registry yükle (tolerant), sonra adopt-merge.
+		// Sıra önemli — tersi registry metadata'sını ezer.
+		const reg = loadRegistry();
 		try {
-			await adoptOrphans(pi);
+			await adoptOrphans(pi, reg);
 		} catch {
 			// best-effort
 		}
+		// registry'de var + live'da YOK → failed/socket gone (poller temizler)
+		for (const r of reg.values()) {
+			if (tasks.has(r.id)) continue;
+			tasks.set(r.id, {
+				id: r.id,
+				name: r.name,
+				command: r.command,
+				isAgent: false,
+				status: "failed",
+				exitCode: -1,
+				error: "socket gone",
+				sock: r.sock,
+				logPath: r.logPath,
+				outputPath: r.outputPath,
+				cwd: r.cwd,
+				startedAt: r.startedAt,
+				notified: r.notified,
+				notifyOnCompletion: r.notifyOnCompletion,
+				triggerOnCompletion: r.triggerOnCompletion,
+				misses: MAX_MISSES,
+			});
+		}
 		if (tasks.size > 0) {
+			saveRegistry(); // adopt edilen + failed işaretlenen haliyle yaz
 			ensurePoller(pi);
 			refreshWidget();
 		}
@@ -582,7 +826,7 @@ export default function (pi: ExtensionAPI) {
 				exitCode: null,
 				sock,
 				logPath: log,
-				outputPath: outPathFor(sock),
+				outputPath: outFromSock(sock),
 				cwd: ctx?.cwd ?? process.cwd(),
 				startedAt: Date.now(),
 				notified: false,
@@ -591,6 +835,7 @@ export default function (pi: ExtensionAPI) {
 				misses: 0,
 			};
 			tasks.set(uuid, task);
+			saveRegistry();
 			if (ctx?.hasUI) uiRef = ctx.ui;
 			currentCtx = ctx;
 			ensurePoller(pi);
@@ -623,10 +868,11 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "bg_logs",
 		label: "Background Logs",
-		description: `Read bounded output from a background task for deliberate inspection; this is not a waiting primitive. Output is capped at ${formatSize(MAX_LOG_BYTES)} for model safety and points to the full output file when truncated. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür.`,
-		promptSnippet: "Read bounded task output when needed; never tail it repeatedly as a wait loop",
+		description: `Read bounded output from a background task for deliberate inspection. Output is capped at ${formatSize(MAX_LOG_BYTES)} for model safety and points to the full output file when truncated. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür. wait_ms>0 verilirse bloklayan okuma yapar: yeni çıktı veya terminal durum gelene kadar en fazla wait_ms bekler (cap 30000); mevcut çıktı/terminal varsa hemen döner, yoksa effective_wait_ms + timed_out raporlanır.`,
+		promptSnippet: "Read bounded task output when needed; pass wait_ms to block for new output instead of polling",
 		promptGuidelines: [
 			"Use bg_logs with a modest maxBytes value only when task output is needed, without flooding context.",
+			"To wait for fresh output, pass wait_ms (max 30000) once instead of calling bg_logs/bg_status in a loop; the call blocks until new output or terminal state, then returns effective_wait_ms and timed_out.",
 			"Do not repeatedly call bg_logs to wait for completion while an automatic terminal notification is pending.",
 			"Use bg_status first only when a deliberate inspection requires the current task state; do not reconfirm a terminal notification.",
 			"Artımlı okumada offset/next_offset zincirini kullan; aynı offset'i tekrar çağırma (uyarı alırsın).",
@@ -638,34 +884,96 @@ export default function (pi: ExtensionAPI) {
 				typeof params.maxBytes === "number" && params.maxBytes > 0 ? Math.floor(params.maxBytes) : DEFAULT_LOG_BYTES,
 				MAX_LOG_BYTES,
 			);
-			if (params.offset !== undefined) {
-				const prev = lastOffsetByTask.get(task.id);
-				lastOffsetByTask.set(task.id, params.offset);
-				const repeat = prev !== undefined && prev === params.offset;
-				let receipt: string;
-				try {
-					const r = readOffset(task.outputPath, params.offset, maxBytes);
-					const head = `[${taskDisplayName(task)} .out offset=${params.offset} next_offset=${r.nextOffset} size=${r.size}${r.truncated ? " TRUNCATED, devamı var" : ""}]`;
-					receipt = r.text === ""
-						? `${head}\n(yeni çıktı yok)`
-						: `${head}\n${r.truncated ? `(devamı için offset=${r.nextOffset} ile tekrar çağır)\n` : ""}${r.text}`;
-				} catch (err: any) {
-					receipt = `(no output yet at ${task.outputPath}: ${err?.message ?? err})`;
+			const useOffset = params.offset !== undefined;
+			const tail = params.tail ?? true;
+			// NABIZ-003: wait_ms parse (cap 30000 — aşım sessizce kırpılır + hint).
+			const requested = typeof params.wait_ms === "number" && params.wait_ms > 0 ? Math.floor(params.wait_ms) : 0;
+			const waitBudget = Math.min(requested, WAIT_CAP_MS);
+			const clipped = requested > WAIT_CAP_MS;
+
+			const buildReceipt = (): { text: string; hasNew: boolean } => {
+				if (useOffset) {
+					const repeat = waitBudget === 0 && offsetTracker.note(task.id, params.offset);
+					// wait_ms ile beklemek sanctioned bekleme yoludur — tekrar uyarısı yalnızca
+					// beklemesiz çağrılarda verilir.
+					let receipt: string;
+					let hasNew = false;
+					try {
+						const r = readOffset(task.outputPath, params.offset, maxBytes);
+						hasNew = r.text !== "";
+						receipt = formatCursorReceipt(taskDisplayName(task), params.offset, r, r.text);
+					} catch (err: any) {
+						receipt = `(no output yet at ${task.outputPath}: ${err?.message ?? err})`;
+					}
+					if (repeat) receipt = `[tekrar] yeni çıktı yok; bekle ya da bildirimi bekle (offset=${params.offset})\n${receipt}`;
+					return {
+						text: `${taskDisplayName(task)} (${shortId(task.id)}) [${task.status}] cursor:\n${receipt}`,
+						hasNew,
+					};
 				}
-				if (repeat) receipt = `[tekrar] yeni çıktı yok; bekle ya da bildirimi bekle (offset=${params.offset})\n${receipt}`;
-				return textResult(`${taskDisplayName(task)} (${shortId(task.id)}) [${task.status}] cursor:\n${receipt}`, {
+				let body: string;
+				try {
+					const r = readBounded(task.outputPath, maxBytes, tail);
+					body = r.text + (r.truncated ? `\n…(truncated at ${formatSize(maxBytes)}; full output: ${task.outputPath})` : "");
+				} catch (err: any) {
+					body = `(no output yet at ${task.outputPath}: ${err?.message ?? err})`;
+				}
+				return {
+					text: `${taskDisplayName(task)} (${shortId(task.id)}) [${task.status}] ${tail ? "tail" : "head"}:\n${body}`,
+					hasNew: false, // tail modunda yenilik = giriş anındaki size'a göre büyüme
+				};
+			};
+
+			if (waitBudget > 0) {
+				const t0 = Date.now();
+				let terminal = await refreshOneTask(pi, task);
+				// Yenilik tabanı: offset modunda istenen offset, tail modunda giriş size'ı.
+				const offNum = useOffset && Number.isFinite(params.offset) ? Math.max(0, Math.floor(params.offset)) : 0;
+				const baseline: number | undefined = useOffset ? offNum : outFileSize(task.outputPath);
+				let r = buildReceipt();
+				let wake: string;
+				if (terminal) {
+					wake = "terminal";
+				} else if (useOffset && r.hasNew) {
+					wake = "immediate";
+				} else {
+					wake = "timeout";
+					let remaining = waitBudget;
+					while (remaining > 0 && !terminal) {
+						const sliceSec = Math.max(1, Math.ceil(Math.min(WAIT_SLICE_MS, remaining) / 1000));
+						try {
+							await pi.exec(
+								"hbmon",
+								["wait", "--sock", task.sock, "--timeout", String(sliceSec), "--until", "done,failed,dep_missing,timeout"],
+								{ timeout: (sliceSec + 15) * 1000 },
+							);
+						} catch {
+							// daemon exec hatası → dosya/terminal kontrolüyle devam
+						}
+						terminal = await refreshOneTask(pi, task);
+						const nowSize = outFileSize(task.outputPath);
+						const grew =
+							nowSize !== undefined && nowSize > 0 && (baseline === undefined ? true : nowSize > baseline);
+						if (terminal || grew) {
+							wake = terminal ? "terminal" : "new-output";
+							break;
+						}
+						remaining = waitBudget - (Date.now() - t0);
+					}
+					r = buildReceipt();
+				}
+				const effective = Date.now() - t0;
+				const timedOut = wake === "timeout";
+				const waitLine =
+					`(wait_ms=${requested}${clipped ? `→${waitBudget} (cap ${WAIT_CAP_MS}'e kırpıldı)` : ""}` +
+					` effective_wait_ms=${effective} timed_out=${timedOut} wake=${wake})`;
+				return textResult(`${r.text}\n${waitLine}`, {
 					task: snapshot(task),
+					wait: { requested_ms: requested, budget_ms: waitBudget, effective_wait_ms: effective, timed_out: timedOut, wake },
 				});
 			}
-			const tail = params.tail ?? true;
-			let body: string;
-			try {
-				const r = readBounded(task.outputPath, maxBytes, tail);
-				body = r.text + (r.truncated ? `\n…(truncated at ${formatSize(maxBytes)}; full output: ${task.outputPath})` : "");
-			} catch (err: any) {
-				body = `(no output yet at ${task.outputPath}: ${err?.message ?? err})`;
-			}
-			return textResult(`${taskDisplayName(task)} (${shortId(task.id)}) [${task.status}] ${tail ? "tail" : "head"}:\n${body}`, {
+			const r = buildReceipt();
+			return textResult(r.text, {
 				task: snapshot(task),
 			});
 		},
@@ -689,7 +997,8 @@ export default function (pi: ExtensionAPI) {
 				task.status = "killed";
 				task.exitCode = -1;
 				tasks.delete(task.id);
-				lastOffsetByTask.delete(task.id);
+				offsetTracker.forget(task.id);
+				saveRegistry();
 				refreshWidget();
 				await notifyCompletion(pi, task);
 			}
@@ -738,7 +1047,7 @@ export default function (pi: ExtensionAPI) {
 				exitCode: null,
 				sock,
 				logPath: String(hs.log ?? sock.replace(/\.sock$/, ".jsonl")),
-				outputPath: outPathFor(sock),
+				outputPath: outFromSock(sock),
 				cwd: ctx.cwd,
 				startedAt: Date.now(),
 				notified: false,
@@ -746,6 +1055,7 @@ export default function (pi: ExtensionAPI) {
 				triggerOnCompletion: true,
 				misses: 0,
 			});
+			saveRegistry();
 			ensurePoller(pi);
 			refreshWidget();
 			ctx.ui.notify(`bg watching ${shortId(uuid)}: ${cmd}`, "info");
@@ -758,7 +1068,8 @@ export default function (pi: ExtensionAPI) {
 			if (ctx.hasUI) uiRef = ctx.ui;
 			currentCtx = ctx;
 			try {
-				if ((await adoptOrphans(pi)) > 0) {
+				if ((await adoptOrphans(pi, loadRegistry())) > 0) {
+					saveRegistry();
 					ensurePoller(pi);
 					refreshWidget();
 				}

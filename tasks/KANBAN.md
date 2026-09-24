@@ -14,8 +14,8 @@ katmanıdır.
 | ID | Başlık | Status | Priority |
 |----|--------|--------|----------|
 | NABIZ-001 | bg_logs cursor (offset/next_offset/truncated + tekrar uyarısı) | done (stub+daemon 6/6) | P1 |
-| NABIZ-002 | Task registry persist (restart durability) | todo | P1 |
-| NABIZ-003 | bg_logs wait_ms (hbmon wait reuse) | todo | P2 |
+| NABIZ-002 | Task registry persist (restart durability) | done (registry 0600 + merge) | P1 |
+| NABIZ-003 | bg_logs wait_ms (hbmon wait reuse) | done (wait 17/17 canlı) | P2 |
 
 Sıra: `NABIZ-001 → NABIZ-002 → NABIZ-003` (003, 001'e bağlı; 001-002 bağımsız,
 paralel yapılabilir).

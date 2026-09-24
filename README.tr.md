@@ -1,5 +1,7 @@
 # nabiz
 
+<img src="assets/nabiz-mark.svg" width="96" alt="nabız logo">
+
 [English](README.md) | **Türkçe**
 
 Uzun işlerin nabzını tutar: build takibi, background task, bildirimler.
