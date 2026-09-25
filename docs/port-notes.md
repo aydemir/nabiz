@@ -1,5 +1,9 @@
 # Port notları (opencode → pi)
 
+> Tarih notu (2026-09-25): bu belge Faz 1–3 döneminin V1 (`@opencode-ai/plugin`)
+> API'sine göre yazıldı ve history olarak korunur. Güncel opencode tarafı V2
+> (`@opencode/plugin`, bundle `nabiz` paketi) — bkz `docs/migration-plan.md` Faz 5.
+
 ## API eşlemesi
 
 | opencode (`@opencode-ai/plugin`) | pi (`@earendil-works/pi-coding-agent`) |

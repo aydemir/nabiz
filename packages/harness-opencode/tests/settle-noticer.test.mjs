@@ -36,6 +36,7 @@ import {
   buildPendingSuffix,
 } from "nabiz-core/settle-notice"
 import settleFactory from "../dist/plugins/opencode-settle-noticer.js"
+import { setupV2, toolAfter, sessionContext, systemTexts } from "./v2-harness.mjs"
 
 function mktmp() {
   const d = join(tmpdir(), `sn-test-${Date.now()}-${Math.floor(Math.random() * 1e6)}`)
@@ -191,15 +192,12 @@ test("hook: bildirilmemiş PASSED → nota eklenir, ikinci çağrı sessiz", asy
   const d = mktmp()
   try {
     writeStatus(d, "k", { ...PASSED, name: "k", ts: "2026-09-07T22:00:00Z" })
-    const inst = await settleFactory({ directory: "/tmp" }, { eventDirs: [d] })
-    const after = inst["tool.execute.after"]
-    const out1 = { output: "derleme çıktısı" }
-    await after({ tool: "bash", args: {} }, out1)
-    assert.ok(out1.output.includes(NOTICE_SENTINEL))
-    assert.ok(out1.output.includes(" k PASSED "))
-    const out2 = { output: "başka çıktı" }
-    await after({ tool: "bash", args: {} }, out2)
-    assert.equal(out2.output, "başka çıktı")
+    const { toolHooks } = await setupV2(settleFactory, { eventDirs: [d] })
+    const out1 = await toolAfter(toolHooks, { input: {}, output: "derleme çıktısı" })
+    assert.ok(out1.includes(NOTICE_SENTINEL))
+    assert.ok(out1.includes(" k PASSED "))
+    const out2 = await toolAfter(toolHooks, { input: {}, output: "başka çıktı" })
+    assert.equal(out2, "başka çıktı")
   } finally {
     rmSync(d, { recursive: true, force: true })
   }
@@ -209,10 +207,9 @@ test("hook: enabled:false → dokunmaz", async () => {
   const d = mktmp()
   try {
     writeStatus(d, "k", { ...PASSED, name: "k" })
-    const inst = await settleFactory({ directory: "/tmp" }, { enabled: false, eventDirs: [d] })
-    const out = { output: "x" }
-    await inst["tool.execute.after"]({ tool: "bash", args: {} }, out)
-    assert.equal(out.output, "x")
+    const { toolHooks } = await setupV2(settleFactory, { enabled: false, eventDirs: [d] })
+    const out = await toolAfter(toolHooks, { input: {}, output: "x" })
+    assert.equal(out, "x")
   } finally {
     rmSync(d, { recursive: true, force: true })
   }
@@ -222,25 +219,22 @@ test("hook: skip marker varsa → dokunmaz", async () => {
   const d = mktmp()
   try {
     writeStatus(d, "k", { ...PASSED, name: "k" })
-    const inst = await settleFactory({ directory: "/tmp" }, { eventDirs: [d] })
-    const out = { output: "x" }
-    await inst["tool.execute.after"](
-      { tool: "bash", args: { command: `ls ${DEFAULT_SKIP_CONTAINS}` } },
-      out,
-    )
-    assert.equal(out.output, "x")
+    const { toolHooks } = await setupV2(settleFactory, { eventDirs: [d] })
+    const out = await toolAfter(toolHooks, {
+      input: { command: `ls ${DEFAULT_SKIP_CONTAINS}` },
+      output: "x",
+    })
+    assert.equal(out, "x")
   } finally {
     rmSync(d, { recursive: true, force: true })
   }
 })
 
 test("hook: disclosure bir kez (sentinel idempotent)", async () => {
-  const inst = await settleFactory({ directory: "/tmp" }, {})
-  const tr = inst["experimental.chat.system.transform"]
-  const out = { system: [] }
-  await tr({}, out)
-  await tr({}, out)
-  assert.equal(out.system.filter((s) => s.includes(DISCLOSURE_SENTINEL)).length, 1)
+  const { sessionHooks } = await setupV2(settleFactory, {})
+  const e = await sessionContext(sessionHooks, [])
+  const e2 = await sessionContext(sessionHooks, e.system)
+  assert.equal(e2.system.filter((s) => systemTexts([s])[0].includes(DISCLOSURE_SENTINEL)).length, 1)
 })
 
 test("buildPendingSuffix: boş → '', dolu → ad+olay+exit", () => {
@@ -255,12 +249,12 @@ test("transform: bekleyen settle disclosure'a gömülür (snapshot)", async () =
   const d = mktmp()
   try {
     writeStatus(d, "k", { ...PASSED, name: "k", ts: "2026-09-07T22:00:00Z" })
-    const inst2 = await settleFactory({ directory: "/tmp" }, { eventDirs: [d] })
-    const out = { system: [] }
-    await inst2["experimental.chat.system.transform"]({}, out)
-    assert.equal(out.system.length, 1)
-    assert.ok(out.system[0].includes(DISCLOSURE_SENTINEL))
-    assert.ok(out.system[0].includes("k PASSED (exit=0)"))
+    const { sessionHooks } = await setupV2(settleFactory, { eventDirs: [d] })
+    const e = await sessionContext(sessionHooks, [])
+    assert.equal(e.system.length, 1)
+    const texts = systemTexts(e.system)
+    assert.ok(texts[0].includes(DISCLOSURE_SENTINEL))
+    assert.ok(texts[0].includes("k PASSED (exit=0)"))
   } finally {
     rmSync(d, { recursive: true, force: true })
   }
@@ -269,11 +263,10 @@ test("transform: bekleyen settle disclosure'a gömülür (snapshot)", async () =
 test("transform: bekleyen yoksa statik metin (ek yok)", async () => {
   const d = mktmp()
   try {
-    const inst = await settleFactory({ directory: "/tmp" }, { eventDirs: [d] })
-    const out = { system: [] }
-    await inst["experimental.chat.system.transform"]({}, out)
-    assert.equal(out.system.length, 1)
-    assert.ok(!out.system[0].includes("Pending settles:"))
+    const { sessionHooks } = await setupV2(settleFactory, { eventDirs: [d] })
+    const e = await sessionContext(sessionHooks, [])
+    assert.equal(e.system.length, 1)
+    assert.ok(!systemTexts(e.system)[0].includes("Pending settles:"))
   } finally {
     rmSync(d, { recursive: true, force: true })
   }
@@ -380,14 +373,13 @@ test("buildStaleNotice: format", () => {
 test("hook: stale notice appended once, second call silent (TASK-131)", async () => {
   const dir = staleFixture([{ name: "gone", event: "HEARTBEAT", ts: oldTs(600000) }])
   try {
-    const inst = await settleFactory({ config: { eventDirs: [dir] } }, {})
-    const out1 = { output: "ok" }
-    await inst["tool.execute.after"]({ callID: "s1", tool: "bash", args: {} }, out1)
-    assert.ok(out1.output.includes(STALE_SENTINEL), "stale appended")
-    assert.ok(out1.output.includes("gone"), "name in notice")
-    const out2 = { output: "ok" }
-    await inst["tool.execute.after"]({ callID: "s2", tool: "bash", args: {} }, out2)
-    assert.ok(!out2.output.includes(STALE_SENTINEL), "once-only")
+    // V2: config tek kaynaktan gelir — ctx.options.
+    const { toolHooks } = await setupV2(settleFactory, { eventDirs: [dir] })
+    const out1 = await toolAfter(toolHooks, { id: "s1", input: {}, output: "ok" })
+    assert.ok(out1.includes(STALE_SENTINEL), "stale appended")
+    assert.ok(out1.includes("gone"), "name in notice")
+    const out2 = await toolAfter(toolHooks, { id: "s2", input: {}, output: "ok" })
+    assert.ok(!out2.includes(STALE_SENTINEL), "once-only")
     assert.ok(existsSync(staleNotifiedPath(dir, "gone")), "marker file")
   } finally {
     rmSync(dir, { recursive: true, force: true })
@@ -397,10 +389,9 @@ test("hook: stale notice appended once, second call silent (TASK-131)", async ()
 test("hook: invalid staleAfterMs falls back to default (fail-soft)", async () => {
   const dir = staleFixture([{ name: "x", event: "HEARTBEAT", ts: oldTs(10000) }])
   try {
-    const inst = await settleFactory({ config: { eventDirs: [dir], staleAfterMs: -5 } }, {})
-    const out = { output: "ok" }
-    await inst["tool.execute.after"]({ callID: "s3", tool: "bash", args: {} }, out)
-    assert.ok(!out.output.includes(STALE_SENTINEL), "10sn < 180sn default")
+    const { toolHooks } = await setupV2(settleFactory, { eventDirs: [dir], staleAfterMs: -5 })
+    const out = await toolAfter(toolHooks, { id: "s3", input: {}, output: "ok" })
+    assert.ok(!out.includes(STALE_SENTINEL), "10sn < 180sn default")
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

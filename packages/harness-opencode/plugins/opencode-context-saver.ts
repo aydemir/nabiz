@@ -1,4 +1,4 @@
-import type { Plugin } from "@opencode-ai/plugin"
+import { Plugin } from "@opencode/plugin"
 import {
   codePointLength,
   extractErrors,
@@ -7,7 +7,6 @@ import {
   formatShortPruneMarker,
   matchesRawPatterns,
   matchesSkipTools,
-  PRUNE_MARKER,
   pruneMiddle,
   resolvePruneBudget,
   shouldSkipForArgs,
@@ -50,16 +49,16 @@ interface CompactConfig {
    * Bu tool adlarında prune uygulanmaz — kod okuma araçları için
    * LLM'in full output görmesi gerekir. Case-sensitive.
    * Eşleşme suffix kuralıdır: girdi ya tam ad (`read`) ya da
-   * `_<girdi>` ile biten ad (`<herhangi-key>_bash_safe`) olmalı —
+   * `_<girdi>` ile biten ad (`<herhangi-key>_nabiz_safe`) olmalı —
    * MCP server key rename'lerine bağışık. Kullanıcı listesi
    * default'larla birleştirilir (üzerine yazmaz).
    * Default: read/read_file/Read/grep/Grep/glob/Glob/list_dir/ListDir/search/Search
-   *   + bash_safe/bash_raw (MCP, TASK-110)
+   *   + nabiz_safe/nabiz_raw (MCP, TASK-110)
    */
   skipTools?: string[]
   /**
    * Oturum başında LLM'e bir kezlik kaçış notu enjekte et
-   * (`experimental.chat.system.transform`). Default true.
+   * (`session.hook("context")`). Default true.
    * `false` ise sadece kırpma marker'ları bilgi verir.
    */
   discloseOnce?: boolean
@@ -94,12 +93,17 @@ const DEFAULT_CONFIG: CompactConfig = {
   skipWhenContains: "#no-prune",
   skipTools: [
     "read", "read_file", "Read", "grep", "Grep", "glob", "Glob", "list_dir", "ListDir", "search", "Search",
-    // MCP server tools (TASK-110): bash server kendi kırpma/ham kararını veriyor.
+    // MCP server tools (TASK-110): nabiz server kendi kırpma/ham kararını veriyor.
     // Plugin bu tool'lara dokunmamalı — aksi halde iki kırpma katmanı üst üste biner.
-    // Eşleşme `matchesSkipTools` ile suffix kuralıdır (`lib/prune.ts`): `bash_safe`
-    // girdisi `<herhangi-key>_bash_safe` adını yakalar, o yüzden server key
-    // rename'leri (örn. `opencode-mcp-bash-tools` → `bash`) listeyi bozmaz.
+    // Eşleşme `matchesSkipTools` ile suffix kuralıdır (`lib/prune.ts`): `nabiz_safe`
+    // girdisi `<herhangi-key>_nabiz_safe` adını yakalar, o yüzden server key
+    // rename'leri listeyi bozmaz.
     // Eski uzun adlar ayrıca listelenmez — suffix kuralı onları zaten kapsar.
+    "nabiz_safe",
+    "nabiz_raw",
+    // Legacy: V1 `bash` key dönemi adları (`bash_safe`/`bash_raw`,
+    // `opencode-mcp-bash-tools_bash_*`). Suffix kuralı yeni girdilerle
+    // yakalanmaz, o yüzden açık tutulur (zararsız, dokunulmaz).
     "bash_safe",
     "bash_raw",
   ],
@@ -146,87 +150,96 @@ function serializeOutput(value: unknown): string {
   }
 }
 
-function formatCompactLog(entries: ToolLogEntry[]): string {
-  const recent = entries.slice(-20)
-  const lines = recent.map((e) => {
-    const status = e.error ? "❌" : "✅"
-    const dur = e.duration < 1000 ? `${e.duration}ms` : `${(e.duration / 1000).toFixed(1)}s`
-    return `${status} [${dur}] ${extractSummarySafe(e.name, e.args)}`
-  })
-  return lines.join("\n")
+/** V2 hook event'i runtime'da mutable draft'tır; tipe `readonly` yazar. */
+function setResultText(result: { content?: unknown }, text: string): void {
+  ;(result as { content: unknown }).content = text
 }
 
-/** Bir kezlik sistem notunun imzası (idempotency kontrolü). */
-/**
- * Oturum başında LLM'e bir kez enjekte edilen kaçış notu. Kısa tutulur
- * (~40 token); tam mekanizma ilk kırpma marker'ında zaten verilir.
- */
-/**
- * Per-call sayaç doldurma: `disableForCalls` / `disable_for_calls`
- * pozitif tamsayı (veya sayısal string) ise döndür, yoksa undefined.
- */
-const ToolCompactPlugin: Plugin = async ({ client }, options?: Record<string, unknown>) => {
-  const config = resolveConfig((options ?? {}) as Partial<CompactConfig>)
-  const logs: ToolLogEntry[] = []
-  const startTimes = new Map<string, number>()
-  // Oturum başına marker seviyesi: ilk kırpmada uzun (tam mekanizma),
-  // sonrakilerde kısa marker. `markerBuilder` sadece prune anında
-  // çağrıldığı için set'e ekleme burada güvenlidir.
-  const disclosedSessions = new Set<string>()
-  // Geçici kapatma sayaçları: sessionID -> kalan ham çağrı sayısı.
-  const rawCounters = new Map<string, number>()
-  let turnCallCount = 0
-
-  const addLog = (entry: ToolLogEntry) => {
-    logs.push(entry)
-    if (logs.length > config.maxLogEntries) logs.shift()
-    turnCallCount++
+/** V2 `Tool.Result.content`: string | Content[] — hepsini düz metne indir. */
+function resultToText(result: { content?: unknown }): string {
+  const c = result.content
+  if (typeof c === "string") return c
+  if (Array.isArray(c)) {
+    return c
+      .map((p) => {
+        if (p != null && typeof p === "object" && "text" in (p as Record<string, unknown>)) {
+          return String((p as Record<string, unknown>).text ?? "")
+        }
+        return serializeOutput(p)
+      })
+      .join("\n")
   }
+  if (c == null) return ""
+  return serializeOutput(c)
+}
 
-  return {
-    async dispose() {
-      logs.length = 0
-      turnCallCount = 0
-      startTimes.clear()
-      disclosedSessions.clear()
-      rawCounters.clear()
-    },
+function systemText(s: unknown): string {
+  if (typeof s === "string") return s
+  if (s != null && typeof s === "object" && "text" in (s as Record<string, unknown>)) {
+    return String((s as Record<string, unknown>).text ?? "")
+  }
+  return ""
+}
+
+export default Plugin.define({
+  id: "opencode-context-saver",
+  async setup(ctx) {
+    const config = resolveConfig((ctx.options ?? {}) as Partial<CompactConfig>)
+    const logs: ToolLogEntry[] = []
+    const startTimes = new Map<string, number>()
+    // Oturum başına marker seviyesi: ilk kırpmada uzun (tam mekanizma),
+    // sonrakilerde kısa marker. `markerBuilder` sadece prune anında
+    // çağrıldığı için set'e ekleme burada güvenlidir.
+    const disclosedSessions = new Set<string>()
+    // Geçici kapatma sayaçları: sessionID -> kalan ham çağrı sayısı.
+    const rawCounters = new Map<string, number>()
+    let turnCallCount = 0
+
+    const addLog = (entry: ToolLogEntry) => {
+      logs.push(entry)
+      if (logs.length > config.maxLogEntries) logs.shift()
+      turnCallCount++
+    }
 
     // Bir kezlik keşif notu: kırpma hiç yaşanmasa da LLM mekanizmayı
     // oturum başında öğrenir. İçerik kontrollü idempotent — host her
     // request'te mevcut system dizisini verdiği için tekrar eklenmez.
-    "experimental.chat.system.transform": async (_input, output) => {
+    // V1 `experimental.chat.system.transform` → V2 `session.hook("context")`.
+    // V2 system parçaları `{ type: "text", text }` objesidir.
+    await ctx.session.hook("context", (event) => {
       if (config.discloseOnce === false) return
-      if (output.system.some((s) => s.includes(DISCLOSURE_SENTINEL))) return
-      output.system.push(DISCLOSURE_TEXT)
-    },
+      if (event.system.some((s) => systemText(s).includes(DISCLOSURE_SENTINEL))) return
+      event.system.push({ type: "text", text: DISCLOSURE_TEXT })
+    })
 
-    "tool.execute.before": async (t) => {
-      startTimes.set(t.callID, Date.now())
-    },
+    await ctx.tool.hook("execute.before", (event) => {
+      startTimes.set(event.id, Date.now())
+    })
 
-    "tool.execute.after": async (t, output) => {
-      const startTime = startTimes.get(t.callID) ?? Date.now()
+    await ctx.tool.hook("execute.after", (event) => {
+      if (event.status !== "completed") return
+      const args = (event.input ?? {}) as Record<string, unknown>
+      const startTime = startTimes.get(event.id) ?? Date.now()
       const duration = Date.now() - startTime
-      startTimes.delete(t.callID)
-      const perCallSkip = shouldSkipForArgs(t.args ?? {}, config.skipWhenContains ?? "#no-prune")
-      const rawOutput = serializeOutput(output.output)
+      startTimes.delete(event.id)
+      const perCallSkip = shouldSkipForArgs(args, config.skipWhenContains ?? "#no-prune")
+      const rawOutput = resultToText(event.result)
 
       const errors = extractErrors(rawOutput, {
         maxLines: config.errorMaxLines,
         tailLines: config.errorTailLines,
       })
       const isError = errors.length > 0
-      const summary = extractSummarySafe(t.tool, t.args ?? {}, {
+      const summary = extractSummarySafe(event.tool, args, {
         maxCharsPerKey: config.maxCharsPerKey,
         maxSummaryChars: config.maxSummaryChars,
       })
 
-      const skipByTool = matchesSkipTools(t.tool, config.skipTools ?? [])
+      const skipByTool = matchesSkipTools(event.tool, config.skipTools ?? [])
       // Geçici kapatma sayacı (oturum başına): config ilk değeri verir,
       // per-call arg doldurur, her bypass bir harcar.
-      const sid = t.sessionID ?? "unknown"
-      const refill = readRawRefill(t.args ?? {})
+      const sid = event.sessionID ?? "unknown"
+      const refill = readRawRefill(args)
       if (refill !== undefined) rawCounters.set(sid, refill)
       if (!rawCounters.has(sid) && (config.disableForCalls ?? 0) > 0) {
         rawCounters.set(sid, Math.floor(config.disableForCalls ?? 0))
@@ -237,7 +250,7 @@ const ToolCompactPlugin: Plugin = async ({ client }, options?: Record<string, un
         counterBypass = true
         rawCounters.set(sid, remaining - 1)
       }
-      const whitelistBypass = matchesRawPatterns(t.args ?? {}, config.alwaysRawCommands ?? [])
+      const whitelistBypass = matchesRawPatterns(args, config.alwaysRawCommands ?? [])
       const rawBypass = perCallSkip || counterBypass || whitelistBypass
       const shouldPrune = !rawBypass && !skipByTool && !isError && codePointLength(rawOutput) > config.compressThreshold
       const trimmed = shouldPrune
@@ -245,7 +258,6 @@ const ToolCompactPlugin: Plugin = async ({ client }, options?: Record<string, un
             headChars: config.headChars,
             tailChars: config.tailChars,
             markerBuilder: (stats) => {
-              const sid = t.sessionID ?? "unknown"
               const shortOpts = {
                 skipWhenContains: config.skipWhenContains ?? "#no-prune",
                 disableForCalls: config.disableForCalls ?? 0,
@@ -276,8 +288,8 @@ const ToolCompactPlugin: Plugin = async ({ client }, options?: Record<string, un
       }
 
       const entry: ToolLogEntry = {
-        name: t.tool,
-        args: t.args ?? {},
+        name: event.tool,
+        args,
         result: entryResult,
         duration,
         timestamp: Date.now(),
@@ -287,24 +299,27 @@ const ToolCompactPlugin: Plugin = async ({ client }, options?: Record<string, un
       addLog(entry)
 
       if (rawBypass) {
-        output.output = rawOutput
+        setResultText(event.result, rawOutput)
       } else if (isError) {
-        output.output = `⚠️ ${summary}\n${errors.join("\n")}\n⏱️ ${duration}ms`
+        setResultText(event.result, `⚠️ ${summary}\n${errors.join("\n")}\n⏱️ ${duration}ms`)
       } else if (shouldPrune) {
-        output.output = `[${summary}]\n${trimmed}\n⏱️ ${duration}ms`
+        setResultText(event.result, `[${summary}]\n${trimmed}\n⏱️ ${duration}ms`)
       }
       // else: küçük output'a dokunma, ham kalsın.
-    },
+    })
 
-    "chat.message": async () => {
-      // Sessiz mod: ozet client.app.log ile TUI'ya yazilmiyor.
-      // app.log Termux/OpenTUI uzerinde hayalet yazi (ghost text) birakiyordu:
-      // eski session-end bildirimi overlay'i render'a kadar input'ta kaliyordu.
-      // Ozet kaybi yok: kirpma marker'lari zaten model ciktisinda duruyor.
+    // V1 `chat.message` → V2 `session.hook("prompt")`: prompt admission'da
+    // turn sayacını sıfırla. Sessiz mod korunur — TUI'ya yazılmaz.
+    await ctx.session.hook("prompt", () => {
       turnCallCount = 0
-    },
+    })
 
-  }
-}
-
-export default ToolCompactPlugin
+    return () => {
+      logs.length = 0
+      turnCallCount = 0
+      startTimes.clear()
+      disclosedSessions.clear()
+      rawCounters.clear()
+    }
+  },
+})

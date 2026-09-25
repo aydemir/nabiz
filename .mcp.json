@@ -2,15 +2,22 @@
   "mcpServers": {
     "codegraph": {
       "command": "codegraph",
-      "args": ["serve", "--mcp"]
-    },
-    "bash": {
-      "command": "node",
-      "args": ["/root/opencode-plugins/dist/plugins/mcp-bash-tools/src/server.js"]
+      "args": [
+        "serve",
+        "--mcp"
+      ]
     },
     "bm": {
       "command": "node",
-      "args": ["/root/opencode-bm/dist/server.js"]
+      "args": [
+        "/root/opencode-bm/dist/server.js"
+      ]
+    },
+    "nabiz": {
+      "command": "node",
+      "args": [
+        "/root/nabiz/packages/harness-opencode/dist/plugins/mcp-bash-tools/src/server.js"
+      ]
     }
   }
 }

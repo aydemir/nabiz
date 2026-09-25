@@ -1,11 +1,11 @@
 /**
- * bash (eski ad: opencode-mcp-bash-tools) — stdio MCP server
+ * nabiz (eski key: bash; daha eski ad: opencode-mcp-bash-tools) — stdio MCP server
  *
  * İki tool sunar (server-içi adlar; opencode TUI'de `<config-key>_<tool>`
- * olarak görünür — config key `bash` olunca TUI adları `bash_safe` /
- * `bash_raw` olur):
- *   - safe: middle-prune + marker (default; TUI: bash_safe).
- *   - raw:  full output (no prune; TUI: bash_raw).
+ * olarak görünür — config key `nabiz` olunca TUI adları `nabiz_safe` /
+ * `nabiz_raw` olur):
+ *   - safe: middle-prune + marker (default; TUI: nabiz_safe).
+ *   - raw:  full output (no prune; TUI: nabiz_raw).
  *
  * MCP protokolü: JSON-RPC 2.0, line-delimited, stdin/stdout.
  * opencode MCP standardı.
@@ -16,7 +16,7 @@ import { bashRawHandler, bashRawSchema } from "./tools/bash_raw.js"
 import * as fs from "node:fs"
 
 const SERVER_INFO = {
-  name: "bash",
+  name: "nabiz",
   version: "0.1.0",
 }
 

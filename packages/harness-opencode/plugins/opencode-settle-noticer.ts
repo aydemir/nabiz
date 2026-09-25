@@ -13,26 +13,22 @@
  *        [sn] settled: <name> <EVENT> (exit=<code>) — <detail> [<statusPath>]
  *      ve `<name>.notified` işaretle (bir final bir kez bildirilir;
  *      aynı adla YENİ final gelirse ts/event farklı → tekrar bildirilir).
- *   4. `experimental.chat.system.transform` ile disclosure push'lar
+ *   4. `session.hook("context")` ile disclosure push'lar
  *      (sentinel ile idempotent).
  *
  * Dürüst sınır: turn-arası WAKEUP YOK. Oturum kapalıyken biten build,
  * ajan bir dahaki temasta (araç sonucu/oturum) öğrenir. Bloklu bekleme
  * gateway'de ölür, BM_ON_SETTLE yerel shell'dir — ikisi de ajanı
  * uyandırmaz; bu plugin "bir daha temas kurduğunda kaçırmaz".
+ * Gerçek uyandırma için hbmon `bg_run` kullan (bekçi aynı oturumda
+ * `opencode run -s` ile yeni turn açar).
  *
- * Disable: opencode.jsonc'de `enabled: false` (config).
+ * Disable: plugin options'da `enabled: false`.
  * Bypass: tool çağrısında `#no-settle-notice` substring.
- *
- * ⚠️ opencode 1.18.29 uyumluluğu: bu dosya sadece `default` export
- * yapıyor. Diğer sabitler `plugins/lib/settle-notice.ts`'de
- * (opencode'un `getLegacyPlugins` Object.values(mod) iterate ettiği
- * için Plugin olmayan export'lar "Plugin export is not a function"
- * hatası veriyor — bkz TASK-111).
  */
 
 import { dirname } from "node:path"
-import type { Plugin } from "@opencode-ai/plugin"
+import { Plugin } from "@opencode/plugin"
 import {
   buildNotice,
   buildPendingSuffix,
@@ -71,29 +67,62 @@ const DEFAULT_CONFIG = {
   staleAfterMs: DEFAULT_STALE_AFTER_MS,
 }
 
-const SettleNoticePlugin: Plugin = async (_input, _options) => {
-  // Config iki kaynaktan gelebilir: factory ikinci argümanı (options,
-  // `pluginOptions` — Plugin tipindeki gerçek sözleşme) veya input.config
-  // (mevcut pluginlerin kullandığı cast pattern'i). İkisini birleştir.
-  const fromInput =
-    ((_input as unknown as { config?: SettleNoticeConfig }).config ?? {}) as SettleNoticeConfig
-  const fromOptions = ((_options ?? {}) as SettleNoticeConfig) as SettleNoticeConfig
-  const config = { ...DEFAULT_CONFIG, ...fromInput, ...fromOptions }
-  const staleAfterMs =
-    typeof config.staleAfterMs === "number" &&
-    Number.isFinite(config.staleAfterMs) &&
-    config.staleAfterMs >= 0
-      ? config.staleAfterMs
-      : DEFAULT_STALE_AFTER_MS
-  const cwd =
-    typeof (_input as unknown as { directory?: unknown }).directory === "string"
-      ? ((_input as unknown as { directory?: string }).directory as string)
-      : process.cwd()
+function systemText(s: unknown): string {
+  if (typeof s === "string") return s
+  if (s != null && typeof s === "object" && "text" in (s as Record<string, unknown>)) {
+    return String((s as Record<string, unknown>).text ?? "")
+  }
+  return ""
+}
 
-  return {
-    "experimental.chat.system.transform": async (_input, output) => {
+/** V2 hook event'i runtime'da mutable draft'tır; tipe `readonly` yazar. */
+function setResultText(result: { content?: unknown }, text: string): void {
+  ;(result as { content: unknown }).content = text
+}
+
+/** V2 `Tool.Result.content`: string | Content[] — düz metne indir. */
+function resultToText(result: { content?: unknown }): string {
+  const c = result.content
+  if (typeof c === "string") return c
+  if (Array.isArray(c)) {
+    return c
+      .map((p) => {
+        if (p != null && typeof p === "object" && "text" in (p as Record<string, unknown>)) {
+          return String((p as Record<string, unknown>).text ?? "")
+        }
+        try {
+          return JSON.stringify(p)
+        } catch {
+          return String(p)
+        }
+      })
+      .join("\n")
+  }
+  if (c == null) return ""
+  return String(c)
+}
+
+export default Plugin.define({
+  id: "opencode-settle-noticer",
+  async setup(ctx) {
+    // V1'de config iki kaynaktan geliyordu (factory options + input.config);
+    // V2'de tek kaynak var: ctx.options.
+    const config = { ...DEFAULT_CONFIG, ...((ctx.options ?? {}) as SettleNoticeConfig) }
+    const staleAfterMs =
+      typeof config.staleAfterMs === "number" &&
+      Number.isFinite(config.staleAfterMs) &&
+      config.staleAfterMs >= 0
+        ? config.staleAfterMs
+        : DEFAULT_STALE_AFTER_MS
+    const cwd =
+      typeof ctx.location?.directory === "string" && ctx.location.directory !== ""
+        ? ctx.location.directory
+        : process.cwd()
+
+    // V1 `experimental.chat.system.transform` → V2 `session.hook("context")`.
+    await ctx.session.hook("context", (event) => {
       if (!config.enabled) return
-      if (output.system.some((s) => s.includes(DISCLOSURE_SENTINEL))) return
+      if (event.system.some((s) => systemText(s).includes(DISCLOSURE_SENTINEL))) return
       // Dinamik ek: oturum açılışında bekleyen settlelari disclosure'a göm
       // (snapshot, salt okunur — tool-output sunum katmanını baypas eder;
       // bildirim + işaretleme after-hook'un işi, bkz TASK-123 deneyi).
@@ -101,13 +130,14 @@ const SettleNoticePlugin: Plugin = async (_input, _options) => {
         resolveEventDirs(config.eventDirs, process.env, cwd),
         config.maxFiles,
       )
-      output.system.push(DISCLOSURE_TEXT + buildPendingSuffix(pending))
-    },
+      event.system.push({ type: "text", text: DISCLOSURE_TEXT + buildPendingSuffix(pending) })
+    })
 
-    "tool.execute.after": async (t, output) => {
+    await ctx.tool.hook("execute.after", (event) => {
       if (!config.enabled) return
+      if (event.status !== "completed") return
 
-      const args = (t.args ?? {}) as Record<string, unknown>
+      const args = (event.input ?? {}) as Record<string, unknown>
       const skipMarker = config.skipWhenContains
       for (const v of Object.values(args)) {
         if (typeof v === "string" && v.includes(skipMarker)) return
@@ -135,9 +165,7 @@ const SettleNoticePlugin: Plugin = async (_input, _options) => {
           markStaleNotified(dirname(rec.statusPath), rec)
         }
       }
-      output.output = (output.output ?? "") + suffix
-    },
-  }
-}
-
-export default SettleNoticePlugin
+      setResultText(event.result, resultToText(event.result) + suffix)
+    })
+  },
+})

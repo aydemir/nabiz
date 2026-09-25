@@ -37,7 +37,22 @@ README EN/TR) | SUPERSEDES: none
 
 [2026-09-19 19:20] DECISION: colorMarkers workstream iptal — tüm izler kaldırıldı (ANSI + emoji restyle dahil) | REASON: 2026-09-11'de test edilip iptal edilmişti; kayda geçmemiş, 8 gün commitlenmemiş artık olarak ağaçta kalmış (her git status'ta "hortlama" izlenimi). Kapsam: plugins/lib/{prune,truncation-notice,settle-notice}.ts + 3 plugin + 3 test + 4 docs + examples + index.json KD bloğu HEAD'e alındı, plugins/lib/color-markers.ts silindi, PROJECT_MAP bölümü çıkarıldı, canlı config'ten 3 colorMarkers anahtarı temizlendi (yedek: opencode.jsonc.bak.20260919-colormarker). Marker formatları HEAD (düz metin) haline döndü | SUPERSEDES: KD-2026-09-11-color-markers
 
-## 2026-09-24
+## 2026-09-25
+
+[2026-09-25 12:00] DECISION: opencode 2.x plugin API geçişi -> V1 hook'ları
+(`@opencode-ai/plugin`) V2 `Plugin.define` modeline taşındı
+(`@opencode/plugin`); altı plugin `plugin/` bundle paketinde tek `nabiz`
+id'si altında toplanır (hook sırası alfabetik dosya sırasıyla aynı);
+seçenekler `{package, options}` + `<plugin-id>` alt-çantalarıyla verilir
+(resmi şemada `pluginOptions` yoktur) | REASON: V1 dosyaları V2'de
+hiç çalışmıyor (disclosure LLM'e ulaşmıyordu); `plugins` config girdisi
+dosya kabul etmez ("must be a directory") — paket dizini tek yüklenebilir
+birimdir; alt-çanta V1 seviyesi per-plugin kontrolü korur | SUPERSEDES: none
+
+[2026-09-25 12:00] DECISION: MCP marka birliği -> config key + server adı
+`nabiz` (tool'lar `nabiz_safe`/`nabiz_raw`); `skipTools`'ta `bash_*`
+legacy alias tutulur | REASON: plugin listesi zaten `nabiz` gösteriyordu;
+tek marka. Suffix kuralı + alias eski key'li kurulumları kırmaz | SUPERSEDES: none
 
 (aşağıdaki 3 kayıt `opencode-plugins@13a0fa1:docs/decisions.md` ile birebir —
 Faz 4'te kaynaktan doğrulandı; taşınan working-tree kopyasında yoktular.)

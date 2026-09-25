@@ -15,7 +15,7 @@ While the agent works on stage, heavy jobs run backstage — and report back whe
   + `/bg` + `/bg-status`. Backed by the hbmon daemon; survives pi restarts.
   `bg_logs` supports cursor reads (`offset`/`next_offset`) and blocking reads
   (`wait_ms`, cap 30000); task registry persists in `~/.pi/bg-hbmon-registry.json`.
-- `.mcp.json` — MCP servers (codegraph, bash, bm), lazy-loaded.
+- `.mcp.json` — MCP servers (codegraph, nabiz, bm), lazy-loaded.
 - `assets/nabiz-mark.svg` — project mark.
 - `docs/port-notes.md` — internal technical notes (opencode → pi port + Faz 3).
 - `docs/migration-plan.md` — opencode-plugins → monorepo migration plan (Faz 1–3
@@ -25,7 +25,9 @@ While the agent works on stage, heavy jobs run backstage — and report back whe
 - `packages/core/` — shared host-independent engine (`nabiz-core`: hbmon
   client, bg-tasks, prune, notice/disclosure texts). No host imports.
 - `packages/harness-opencode/` — opencode adapter (`nabiz-opencode`:
-  6 plugins via single server entry + MCP bash-tools + scripts/tests).
+  6 plugins via `plugin/` bundle package (id `nabiz`) + MCP nabiz-tools
+  (`nabiz_safe`/`nabiz_raw`) + scripts/tests). Kurulum:
+  `node packages/harness-opencode/scripts/setup.mjs --yes`.
 
 ## Usage
 

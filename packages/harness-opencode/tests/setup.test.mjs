@@ -8,23 +8,26 @@
 
 import test from "node:test"
 import assert from "node:assert/strict"
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   MCP_KEY,
   SetupError,
   applyPlan,
+  applySymlinkCleanup,
   checkRepo,
   computePlan,
+  discoveryDirFor,
   loadConfig,
+  packageDirFor,
   parseArgs,
+  planSymlinkCleanup,
   repoRoot,
   run,
 } from "../scripts/setup.mjs"
 
 const ROOT = repoRoot()
-const PLUGIN_COUNT = 6
 
 function collector() {
   const lines = []
@@ -55,7 +58,7 @@ test("checkRepo: boş dizinde eksikleri listeler", () => {
   }
 })
 
-test("computePlan: boş config'e mcp.bash + 6 plugin ekler", () => {
+test("computePlan: boş config'e mcp.nabiz + paket dizini ekler", () => {
   const { changes, next, dirty } = computePlan({}, ROOT)
   assert.equal(dirty, true)
   assert.equal(next.mcp[MCP_KEY].type, "local")
@@ -64,8 +67,68 @@ test("computePlan: boş config'e mcp.bash + 6 plugin ekler", () => {
     join(ROOT, "dist", "plugins", "mcp-bash-tools", "src", "server.js"),
   ])
   assert.equal(next.mcp[MCP_KEY].enabled, true)
-  assert.equal(next.plugin.length, PLUGIN_COUNT)
-  assert.ok(changes.length >= 1 + PLUGIN_COUNT)
+  assert.deepEqual(next.plugins, [packageDirFor(ROOT)], "tek paket girdisi")
+  assert.ok(!("plugin" in next), "V1 anahtarı yazılmaz")
+  assert.equal(changes.length, 2)
+})
+
+test("computePlan: repo'ya ait stale dosya girdileri temizlenir (V1 plugin + V2 plugins)", () => {
+  const owned0 = join(ROOT, "plugins", "opencode-context-saver.ts")
+  const owned1 = join(ROOT, "plugins", "opencode-hbmon.ts")
+  const cfg = {
+    mcp: { [MCP_KEY]: { type: "local", command: ["node", join(ROOT, "dist", "plugins", "mcp-bash-tools", "src", "server.js")], enabled: true } },
+    plugin: [owned0, "/x/baskasinin.ts"],
+    plugins: [owned1, { package: owned0, options: {} }, "/y/baskasinin.ts"],
+  }
+  const { next, dirty } = computePlan(cfg, ROOT)
+  assert.equal(dirty, true)
+  // Bizimkiler gitti, başkasınınkiler duruyor + paket dizini eklendi.
+  assert.deepEqual(next.plugin, ["/x/baskasinin.ts"])
+  assert.deepEqual(next.plugins, ["/y/baskasinin.ts", packageDirFor(ROOT)])
+  // mcp zaten günceldi → sadece temizlik değişiklikleri.
+  assert.ok(
+    next.mcp[MCP_KEY].command[1].endsWith("mcp-bash-tools/src/server.js"),
+  )
+})
+
+test("computePlan: mcp.bash (bizim dist) → mcp.nabiz taşınır, enabled korunur", () => {
+  const cfg = {
+    mcp: {
+      bash: {
+        type: "local",
+        command: ["node", join(ROOT, "dist", "plugins", "mcp-bash-tools", "src", "server.js")],
+        enabled: false,
+      },
+    },
+  }
+  const { next, dirty } = computePlan(cfg, ROOT)
+  assert.equal(dirty, true)
+  assert.ok(!("bash" in next.mcp), "eski key gider")
+  assert.equal(next.mcp[MCP_KEY].type, "local")
+  assert.ok(next.mcp[MCP_KEY].command[1].endsWith("mcp-bash-tools/src/server.js"))
+  assert.equal(next.mcp[MCP_KEY].enabled, false, "kullanıcı bayrağı korunur")
+})
+
+test("computePlan: başkasının mcp.bash girdisine dokunmaz", () => {
+  const cfg = {
+    mcp: { bash: { type: "local", command: ["something-else"], enabled: true } },
+  }
+  const { next } = computePlan(cfg, ROOT)
+  assert.deepEqual(next.mcp.bash, cfg.mcp.bash, "yabancı girdi korunur")
+  assert.ok(next.mcp[MCP_KEY], "nabiz ayrıca eklenir")
+})
+
+test("computePlan: başkasına ait girdilere + pluginOptions'a dokunmaz", () => {
+  const cfg = {
+    mcp: { codegraph: { type: "local", command: ["x"], enabled: true } },
+    plugin: ["/x/baskasinin.ts"],
+    pluginOptions: { "my-opt": 1 },
+  }
+  const { next } = computePlan(cfg, ROOT)
+  assert.deepEqual(next.mcp.codegraph, cfg.mcp.codegraph)
+  assert.deepEqual(next.pluginOptions, cfg.pluginOptions)
+  assert.deepEqual(next.plugin, ["/x/baskasinin.ts"], "yabancı V1 girdisi korunur")
+  assert.ok(next.mcp[MCP_KEY])
 })
 
 test("computePlan: kullanıcı anahtarlarına dokunmaz", () => {
@@ -84,6 +147,42 @@ test("computePlan: idempotent (uygulanmış plana ikinci pass temiz)", () => {
   const second = computePlan(first.next, ROOT)
   assert.equal(second.dirty, false)
   assert.deepEqual(second.changes, [])
+})
+
+test("discoveryDirFor: config yanındaki plugins/ klasörü", () => {
+  assert.equal(discoveryDirFor("/a/b/opencode.jsonc"), "/a/b/plugins")
+})
+
+test("packageDirFor: repo plugin/ dizini", () => {
+  assert.equal(packageDirFor(ROOT), join(ROOT, "plugin"))
+})
+
+test("planSymlinkCleanup: repo hedefli symlink'leri bulur, yabancı/normal dosyaya dokunmaz", () => {
+  const dir = mkdtempSync(join(tmpdir(), "links-"))
+  try {
+    const cfg = join(dir, "opencode.jsonc")
+    const ddir = discoveryDirFor(cfg)
+    mkdirSync(ddir, { recursive: true })
+    // Bizim symlink → listelenir.
+    symlinkSync(join(ROOT, "plugins", "opencode-hbmon.ts"), join(ddir, "opencode-hbmon.ts"))
+    // Yabancı symlink → yok sayılır (hedefi de gerçek dosya).
+    writeFileSync(join(dir, "yabanci-hedef.ts"), "// yabancı")
+    symlinkSync(join(dir, "yabanci-hedef.ts"), join(ddir, "opencode-context-saver.ts"))
+    // Normal dosya → yok sayılır.
+    writeFileSync(join(ddir, "opencode-build-tracker.ts"), "benim dosyam")
+    const plans = planSymlinkCleanup(ROOT, cfg)
+    assert.equal(plans.length, 1)
+    assert.ok(plans[0].link.endsWith("opencode-hbmon.ts"))
+    const removed = applySymlinkCleanup(plans)
+    assert.equal(removed.length, 1)
+    assert.ok(!existsSync(join(ddir, "opencode-hbmon.ts")))
+    // Yabancı + normal dosya duruyor.
+    assert.ok(existsSync(join(ddir, "opencode-context-saver.ts")))
+    assert.equal(readFileSync(join(ddir, "opencode-build-tracker.ts"), "utf8"), "benim dosyam")
+    assert.deepEqual(planSymlinkCleanup(ROOT, cfg), [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test("run: bayraksız → plan + exit 2, dosya yazılmaz", async () => {
@@ -120,7 +219,7 @@ test("run: --check kirliyken exit 1, --yes sonrası exit 0", async () => {
     assert.equal(await run(["--yes"], { root: ROOT, configPath: path, ...c }), 0)
     const written = JSON.parse(readFileSync(path, "utf8"))
     assert.ok(written.mcp[MCP_KEY])
-    assert.equal(written.plugin.length, PLUGIN_COUNT)
+    assert.deepEqual(written.plugins, [packageDirFor(ROOT)], "paket dizini tek girdi")
     assert.equal(await run(["--check"], { root: ROOT, configPath: path, ...c }), 0)
     assert.equal(await run(["--yes"], { root: ROOT, configPath: path, ...c }), 0)
   } finally {
@@ -131,7 +230,7 @@ test("run: --check kirliyken exit 1, --yes sonrası exit 0", async () => {
 test("run: --yes yedek alır, kullanıcı girdisini korur", async () => {
   const { dir, path } = tmpCfg()
   try {
-    writeFileSync(path, JSON.stringify({ mcp: { other: { a: 1 } }, plugin: [] }))
+    writeFileSync(path, JSON.stringify({ mcp: { other: { a: 1 } }, plugins: [] }))
     const c = collector()
     assert.equal(await run(["--yes"], { root: ROOT, configPath: path, ...c }), 0)
     const written = JSON.parse(readFileSync(path, "utf8"))

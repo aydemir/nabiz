@@ -30,8 +30,8 @@ export const DISCLOSURE_TEXT =
   "(marker `[... pruned: N→M chars (X% saved) ...]`; first prune in session " +
   "carries the full escape list, later ones are short). " +
   "`read`/`grep`/`glob` are NEVER pruned (skipTools) — what you see is full. " +
-  "MCP `bash_safe`/`bash_raw` decide their own pruning (plugin never " +
+  "MCP `nabiz_safe`/`nabiz_raw` decide their own pruning (plugin never " +
   "double-prunes them). Raw output, in order: embed `#no-prune` in tool " +
-  "args (skipWhenContains, honored) | call MCP `bash_raw` | " +
+  "args (skipWhenContains, honored) | call MCP `nabiz_raw` | " +
   "`alwaysRawCommands` whitelist (config) | `disableForCalls=N` (next N " +
   "raw) | `enabled:false` (off)."

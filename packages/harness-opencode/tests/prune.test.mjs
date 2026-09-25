@@ -189,25 +189,25 @@ test("formatShortPruneMarker: backwards-compatible when called with only stats",
 })
 
 test("matchesSkipTools: exact match (native tools)", () => {
-  assert.equal(matchesSkipTools("read", ["read", "bash_safe"]), true)
+  assert.equal(matchesSkipTools("read", ["read", "nabiz_safe"]), true)
   assert.equal(matchesSkipTools("Read", ["read", "Read"]), true)
-  assert.equal(matchesSkipTools("bash", ["read", "bash_safe"]), false)
+  assert.equal(matchesSkipTools("bash", ["read", "nabiz_safe"]), false)
 })
 
 test("matchesSkipTools: _suffix match survives MCP server key renames", () => {
-  const list = ["bash_safe", "bash_raw"]
-  assert.equal(matchesSkipTools("bash_safe", list), true)
-  assert.equal(matchesSkipTools("bash_raw", list), true)
-  assert.equal(matchesSkipTools("opencode-mcp-bash-tools_bash_safe", list), true)
-  assert.equal(matchesSkipTools("opencode-mcp-bash-tools_bash_raw", list), true)
-  assert.equal(matchesSkipTools("futurekey_bash_safe", list), true)
+  const list = ["nabiz_safe", "nabiz_raw"]
+  assert.equal(matchesSkipTools("nabiz_safe", list), true)
+  assert.equal(matchesSkipTools("nabiz_raw", list), true)
+  assert.equal(matchesSkipTools("opencode-mcp-bash-tools_nabiz_safe", list), true)
+  assert.equal(matchesSkipTools("opencode-mcp-bash-tools_nabiz_raw", list), true)
+  assert.equal(matchesSkipTools("futurekey_nabiz_safe", list), true)
 })
 
 test("matchesSkipTools: underscore boundary prevents false positives", () => {
   // "bread" ends with "read" but not "_read" — must NOT match.
   assert.equal(matchesSkipTools("bread", ["read"]), false)
   assert.equal(matchesSkipTools("thread", ["read"]), false)
-  assert.equal(matchesSkipTools("notbash_safe", ["bash_safe"]), false)
+  assert.equal(matchesSkipTools("notnabiz_safe", ["nabiz_safe"]), false)
   assert.equal(matchesSkipTools("xread", ["read"]), false)
 })
 

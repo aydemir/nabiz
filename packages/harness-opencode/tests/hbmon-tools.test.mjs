@@ -22,6 +22,7 @@ import {
   watchBuild,
 } from "nabiz-core/hbmon-tools"
 import hbmonFactory from "../dist/plugins/opencode-hbmon.js"
+import { setupV2, textOf } from "./v2-harness.mjs"
 
 const LIVE = !!process.env.HBMON_LIVE
 
@@ -177,14 +178,20 @@ test("summarizeWait: durum cümleleri", () => {
   assert.equal(summarizeWait({ state: "stalled", woke_on: "stall_suspect" }, 0), "woke_on=stall_suspect state=stalled — hbmon_status ile detaya bak")
 })
 
-test("plugin: default export + 3 tool + kapalı-modu", async () => {
-  assert.equal(typeof hbmonFactory, "function")
-  const inst = await hbmonFactory({ directory: "/tmp" }, {})
-  for (const name of ["hbmon_watch", "hbmon_wait", "hbmon_status"]) {
-    assert.equal(typeof inst.tool[name].execute, "function", `${name} execute`)
+test("plugin: V2 define + 7 tool + kapalı-modu", async () => {
+  assert.equal(typeof hbmonFactory, "object")
+  assert.equal(typeof hbmonFactory.setup, "function")
+  assert.equal(hbmonFactory.id, "opencode-hbmon")
+  const { addedTools } = await setupV2(hbmonFactory, {})
+  for (const name of ["hbmon_watch", "hbmon_wait", "hbmon_status", "bg_run", "bg_status", "bg_logs", "bg_kill"]) {
+    const tool = addedTools.find((t) => t.name === name)
+    assert.ok(tool, `${name} registered`)
+    assert.equal(typeof tool.execute, "function", `${name} execute`)
   }
-  const off = await hbmonFactory({ directory: "/tmp" }, { enabled: false })
-  assert.ok((await off.tool.hbmon_wait.execute({ sock: "x" }, {})).includes("kapalı"))
+  const off = await setupV2(hbmonFactory, { enabled: false })
+  const wait = off.addedTools.find((t) => t.name === "hbmon_wait")
+  const res = await wait.execute({ sock: "x" }, {})
+  assert.ok(textOf(res.content ?? res).includes("kapalı"))
 })
 
 test("plugin tool: hbmon_wait uçtan uca (shim)", async () => {
@@ -198,8 +205,10 @@ test("plugin tool: hbmon_wait uçtan uca (shim)", async () => {
   process.env.FAKE_UUID = s.env.FAKE_UUID
   process.env.FAKE_SEQ_DIR = s.env.FAKE_SEQ_DIR
   try {
-    const inst = await hbmonFactory({ directory: "/tmp" }, {})
-    const out = await inst.tool.hbmon_wait.execute({ sock: "sock-w5" }, {})
+    const { addedTools } = await setupV2(hbmonFactory, {})
+    const wait = addedTools.find((x) => x.name === "hbmon_wait")
+    const res = await wait.execute({ sock: "sock-w5" }, {})
+    const out = textOf(res.content ?? res)
     assert.ok(out.startsWith("done code=0 in 38.5s"), out.split("\n")[0])
     assert.ok(out.includes('"state":"done"'))
   } finally {

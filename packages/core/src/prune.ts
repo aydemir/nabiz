@@ -180,11 +180,11 @@ export function matchesRawPatterns(args: unknown, patterns: readonly string[]): 
  *
  * Neden suffix? opencode MCP tool adını `<server-key>_<tool>` olarak
  * expose eder; server key config'te kullanıcı tarafından seçilir ve
- * rename edilebilir (`opencode-mcp-bash-tools` → `bash`). Düz
+ * rename edilebilir (`bash` → `nabiz`). Düz
  * `includes` listesi böyle bir rename'de sessizce bozulur (çift-kırpma
- * geri gelir). Suffix kuralı key'den bağımsızdır: `bash_safe` girdisi
- * hem `bash_safe` hem `opencode-mcp-bash-tools_bash_safe` hem de
- * gelecekteki herhangi bir `<key>_bash_safe` adını yakalar.
+ * geri gelir). Suffix kuralı key'den bağımsızdır: `nabiz_safe` girdisi
+ * hem `nabiz_safe` hem `opencode-mcp-bash-tools_nabiz_safe` hem de
+ * gelecekteki herhangi bir `<key>_nabiz_safe` adını yakalar.
  *
  * Ayraç şartı (`"_" + entry`): `read` girdisinin `bread`/`thread` gibi
  * tool'ları yanlış yakalamasını önler — eşleşme ya tam ad ya da

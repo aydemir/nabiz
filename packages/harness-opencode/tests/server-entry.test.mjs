@@ -1,13 +1,13 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import * as serverEntry from "../dist/plugins/server.js"
+import { setupV2, hasHook } from "./v2-harness.mjs"
 
-// opencode 1.18.29 `opencode plugin <pkg>` manifest sözleşmesi:
-// exports["./server"] çözümlenmeli ve modülün TÜM export değerleri
-// function olmalı (getLegacyPlugins Object.values iterate eder,
-// function olmayan tek export tüm paketi düşürür).
+// V2 (`@opencode/plugin` 2.x): her plugin dosyası `export default
+// Plugin.define({ id, setup })` yapar. `server.ts` runtime'da plugin
+// olarak yüklenmez — altı tanımı tek noktadan re-export eder.
 
-test("server entry: exposes exactly the six plugin factories", () => {
+test("server entry: exposes exactly the six plugin definitions", () => {
   assert.deepEqual(Object.keys(serverEntry).sort(), [
     "buildTracker",
     "contextSaver",
@@ -17,44 +17,41 @@ test("server entry: exposes exactly the six plugin factories", () => {
     "truncationNoticer",
   ])
   for (const [name, value] of Object.entries(serverEntry)) {
-    assert.equal(typeof value, "function", `${name} must be a function`)
+    assert.equal(typeof value, "object", `${name} must be a V2 plugin definition object`)
+    assert.equal(typeof value.setup, "function", `${name} must expose setup()`)
+    assert.equal(typeof value.id, "string", `${name} must have a stable id`)
   }
 })
 
-test("server entry: every factory instantiates with hooks", async () => {
-  for (const [name, factory] of Object.entries(serverEntry)) {
-    const instance = await factory({ directory: "/tmp" }, {})
+test("server entry: every definition sets up hooks or tools", async () => {
+  for (const [name, def] of Object.entries(serverEntry)) {
+    const { sessionHooks, toolHooks, addedTools, cleanup } = await setupV2(def, {})
+    const hookCount = Object.keys(sessionHooks).length + Object.keys(toolHooks).length
     assert.ok(
-      Object.keys(instance).length > 0,
-      `${name} instance must expose hooks`,
+      hookCount > 0 || addedTools.length > 0,
+      `${name} must register session/tool hooks or add tools`,
     )
-    const hook =
-      instance.dispose ??
-      instance["tool.execute.after"] ??
-      instance["experimental.chat.system.transform"]
-    // Custom-tool plugin'leri (hbmon ilk örneği): tool.*.execute sayılır.
-    const tools = instance.tool ?? {}
-    const hasCallableTool = Object.values(tools).some(
-      (t) => t !== null && typeof t === "object" && typeof t.execute === "function",
-    )
-    assert.ok(
-      typeof hook === "function" || hasCallableTool,
-      `${name} must expose a callable hook or tool`,
-    )
+    await cleanup?.()
   }
 })
 
-test("server entry: shared options object reaches all factories", async () => {
-  const cs = await serverEntry.contextSaver({ directory: "/tmp" }, { enabled: false })
-  assert.equal(typeof cs["tool.execute.after"], "function")
-  const bt = await serverEntry.buildTracker({ directory: "/tmp" }, { verbose: false })
-  assert.equal(typeof bt["tool.execute.after"], "function")
-  const tn = await serverEntry.truncationNoticer({ directory: "/tmp" }, {})
-  assert.equal(typeof tn["tool.execute.after"], "function")
-  const cl = await serverEntry.cpuLiveness({ directory: "/tmp" }, {})
-  assert.equal(typeof cl["experimental.chat.system.transform"], "function")
-  const sn = await serverEntry.settleNoticer({ directory: "/tmp" }, {})
-  assert.equal(typeof sn["tool.execute.after"], "function")
-  const hb = await serverEntry.hbmon({ directory: "/tmp" }, {})
-  assert.equal(typeof hb.tool.hbmon_wait.execute, "function")
+test("server entry: shared options object reaches all definitions", async () => {
+  const cs = await setupV2(serverEntry.contextSaver, { enabled: false })
+  assert.ok(hasHook(cs.toolHooks, "execute.after"))
+  await cs.cleanup?.()
+  const bt = await setupV2(serverEntry.buildTracker, { verbose: false })
+  assert.ok(hasHook(bt.toolHooks, "execute.after"))
+  await bt.cleanup?.()
+  const tn = await setupV2(serverEntry.truncationNoticer, {})
+  assert.ok(hasHook(tn.toolHooks, "execute.after"))
+  await tn.cleanup?.()
+  const cl = await setupV2(serverEntry.cpuLiveness, {})
+  assert.ok(hasHook(cl.sessionHooks, "context"))
+  await cl.cleanup?.()
+  const sn = await setupV2(serverEntry.settleNoticer, {})
+  assert.ok(hasHook(sn.toolHooks, "execute.after"))
+  await sn.cleanup?.()
+  const hb = await setupV2(serverEntry.hbmon, {})
+  assert.ok(hb.addedTools.some((t) => t.name === "hbmon_wait" && typeof t.execute === "function"))
+  await hb.cleanup?.()
 })

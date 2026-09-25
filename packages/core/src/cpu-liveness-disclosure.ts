@@ -31,7 +31,7 @@ export const CPU_LIVENESS_TEXT =
     "Fresh I/O keywords (Downloading/Locking/Waiting, last 15s) grant capped grace rounds (--ioGraceRounds, default 3; 0 disables). " +
     "Never auto-kills unless --allow-kill (I/O-wait false-positive risk). " +
   "Linux /proc verified; macOS/Windows readers UNTESTED. " +
-  "To disable: \"pluginOptions.opencode-cpu-liveness.enabled\": false."
+  "To disable: package-entry options {\"opencode-cpu-liveness\": {\"enabled\": false}}."
 
 // Statik metin npx formundadır — SADECE fallback (paket npm'de yayımlıysa
 // veya bin PATH'teyse). `private:true` workspace paketi registry'de YOK,
@@ -43,13 +43,15 @@ export function resolveAgentPath(fromUrl: string | URL = import.meta.url): strin
     const here = dirname(fileURLToPath(fromUrl instanceof URL ? fromUrl.href : fromUrl))
     // Monorepo: core, harness'in nerede yaşadığını bilemez — çözümleme
     // ÇAĞIRANın konumundan yapılır (harness plugin'i import.meta.url verir).
-    // dist layout: dist/plugins -> paket kökü 3 seviye yukarıda;
-    // kaynak layout (tsx): plugins -> paket kökü 2 seviye yukarıda.
+    // dist layout: dist/plugins -> paket kökü 2 seviye yukarıda;
+    // kaynak layout (V2: opencode .ts'yi yerinde yükler): plugins ->
+    // paket kökü 1 seviye yukarıda. Sırayla dene, ilk var olanı al.
     // (Eski tek-repo düzeni: core/dist çağrılarında import.meta.url default'u
     // aynı adayları dener, bulamazsa null + npx fallback — geriye uyumlu.)
     const candidates = [
-      resolve(here, "../../../scripts/cpu-liveness-probe/cpu-liveness-agent.js"),
+      resolve(here, "../scripts/cpu-liveness-probe/cpu-liveness-agent.js"),
       resolve(here, "../../scripts/cpu-liveness-probe/cpu-liveness-agent.js"),
+      resolve(here, "../../../scripts/cpu-liveness-probe/cpu-liveness-agent.js"),
     ]
     return candidates.find((p) => existsSync(p)) ?? null
   } catch {
@@ -80,6 +82,6 @@ export function buildCpuLivenessText(agentPath: string | null): string {
     "Fresh I/O keywords (Downloading/Locking/Waiting, last 15s) grant capped grace rounds (--ioGraceRounds, default 3; 0 disables). " +
     "Never auto-kills unless --allow-kill (I/O-wait false-positive risk). " +
     "Linux /proc verified; macOS/Windows readers UNTESTED. " +
-    "To disable: \"pluginOptions.opencode-cpu-liveness.enabled\": false."
+    "To disable: package-entry options {\"opencode-cpu-liveness\": {\"enabled\": false}}."
   )
 }

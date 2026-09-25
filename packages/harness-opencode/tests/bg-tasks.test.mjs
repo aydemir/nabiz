@@ -28,6 +28,7 @@ import {
   writeRecord,
 } from "nabiz-core/bg-tasks"
 import hbmonFactory from "../dist/plugins/opencode-hbmon.js"
+import { setupV2, textOf } from "./v2-harness.mjs"
 
 const LIVE = !!process.env.HBMON_LIVE
 
@@ -146,16 +147,18 @@ test("bg_logs cursor: makbuz + tekrar uyarısı + tail regresyonu (daemon yok)",
   process.env.HBMON_BG_DIR = dir
   try {
     writeRecord(dir, rec({ name: "cursor", uuid: "cur001", out }))
-    const plugin = await hbmonFactory({}, {})
-    const first = String(await plugin.tool.bg_logs.execute({ id: "cursor", offset: 0, tail_bytes: 7 }))
+    const { addedTools } = await setupV2(hbmonFactory, {})
+    const bgLogs = addedTools.find((t) => t.name === "bg_logs")
+    const runLogs = async (input) => textOf((await bgLogs.execute(input, {})).content)
+    const first = String(await runLogs({ id: "cursor", offset: 0, tail_bytes: 7 }))
     assert.match(first, /offset=0 next_offset=7 size=21/)
     assert.match(first, /satir1/)
-    const again = String(await plugin.tool.bg_logs.execute({ id: "cursor", offset: 0, tail_bytes: 7 }))
+    const again = String(await runLogs({ id: "cursor", offset: 0, tail_bytes: 7 }))
     assert.match(again, /\[tekrar\] yeni çıktı yok; bekle ya da bildirimi bekle \(offset=0\)/)
-    const cont = String(await plugin.tool.bg_logs.execute({ id: "cursor", offset: 7 }))
+    const cont = String(await runLogs({ id: "cursor", offset: 7 }))
     assert.ok(!cont.includes("[tekrar]"))
     assert.match(cont, /satir2/)
-    const tail = String(await plugin.tool.bg_logs.execute({ id: "cursor" }))
+    const tail = String(await runLogs({ id: "cursor" }))
     assert.match(tail, /\[cursor \.out/)
     assert.match(tail, /satir3/)
   } finally {
@@ -186,13 +189,52 @@ test("readLastEvent: jsonl kuyruğundan terminal olay (daemon-ölü fallback)", 
   assert.equal(readLastEvent(join(dir, "yok.jsonl")), undefined)
 })
 
+test("bg_run: bekçi NABIZ_WAKE_NODE runtime ile spawn edilir (V2 execPath=opencode)", async () => {
+  // Canlı kanıt 2026-09-25: process.execPath V2'de opencode binary'sidir;
+  // bekçi "Unrecognized flag: --sock in command opencode" diye ölmüştü.
+  // Sahte hbmon (watch handshake) + NABIZ_WAKE_NODE=/bin/echo ile spawn
+  // satırı wake log'a düşmeli (--session ses_t görünür).
+  const dir = mkdtempSync(join(tmpdir(), "bg-"))
+  const prevDir = process.env.HBMON_BG_DIR
+  const prevNode = process.env.NABIZ_WAKE_NODE
+  const shim = join(dir, "hbmon")
+  writeFileSync(
+    shim,
+    `#!/usr/bin/env bash\nif [ "$1" = "watch" ]; then echo '{"v":1,"ev":"ready","uuid":"wake1","sock":"${dir}/t.sock","log":"${dir}/t.jsonl"}'; exit 0; fi\nexit 0\n`,
+  )
+  chmodSync(shim, 0o755)
+  process.env.HBMON_BG_DIR = dir
+  process.env.NABIZ_WAKE_NODE = "/bin/echo"
+  try {
+    const { addedTools } = await setupV2(hbmonFactory, { bin: shim })
+    const bgRun = addedTools.find((t) => t.name === "bg_run")
+    const res = await bgRun.execute({ name: "w1", command: "echo hi" }, { sessionID: "ses_t" })
+    assert.match(textOf(res.content), /Uyandırma kuruldu/)
+    const wakeLog = join(dir, "bg-wake1.wake.log")
+    let body = ""
+    for (let i = 0; i < 40 && !body.includes("--session ses_t"); i++) {
+      await new Promise((r) => setTimeout(r, 50))
+      try {
+        body = readFileSync(wakeLog, "utf8")
+      } catch { /* henüz yok */ }
+    }
+    assert.ok(body.includes("--session ses_t"), `bekçi argv wake log'da olmalı: ${body.slice(0, 200)}`)
+  } finally {
+    if (prevDir === undefined) delete process.env.HBMON_BG_DIR
+    else process.env.HBMON_BG_DIR = prevDir
+    if (prevNode === undefined) delete process.env.NABIZ_WAKE_NODE
+    else process.env.NABIZ_WAKE_NODE = prevNode
+  }
+})
+
 test("bg_run: name validasyonu (daemon yok)", async () => {
-  const plugin = await hbmonFactory({}, {})
-  const bad = await plugin.tool.bg_run.execute(
+  const { addedTools } = await setupV2(hbmonFactory, {})
+  const bgRun = addedTools.find((t) => t.name === "bg_run")
+  const bad = await bgRun.execute(
     { name: "kötü ad!", command: "echo x" },
     { sessionID: "ses_t" },
   )
-  assert.match(String(bad), /HATA.*name/)
+  assert.match(textOf(bad.content), /HATA.*name/)
 })
 
 test("bg-wake: --dry-run komut üretir (daemon yok)", async () => {
@@ -209,27 +251,30 @@ test("bg-wake: --dry-run komut üretir (daemon yok)", async () => {
   assert.match(out.stdout, /opencode run -s ses_x "\[bg\] n/)
 })
 
-test("LIVE e2e: bg_run→status→logs→kill (gerçek daemon)", { skip: !LIVE }, async () => {  const plugin = await hbmonFactory({}, {})
+test("LIVE e2e: bg_run→status→logs→kill (gerçek daemon)", { skip: !LIVE }, async () => {
+  const { addedTools } = await setupV2(hbmonFactory, {})
+  const tool = (name) => addedTools.find((t) => t.name === name)
+  const runTool = async (name, input, ctx) => textOf((await tool(name).execute(input, ctx)).content)
   const ctx = { sessionID: "ses_live" }
   const name = `livetest-${Date.now().toString(36)}`
   const run = String(
-    await plugin.tool.bg_run.execute({ name, command: "echo hi-live && sleep 30", notify: false }, ctx),
+    await runTool("bg_run", { name, command: "echo hi-live && sleep 30", notify: false }, ctx),
   )
   assert.match(run, /bg_run OK/)
   const id = run.match(/id=([0-9a-f]+)/)?.[1]
   assert.ok(id, "uuid dönmeli")
-  const st = String(await plugin.tool.bg_status.execute({ id }, ctx))
+  const st = String(await runTool("bg_status", { id }, ctx))
   assert.match(st, new RegExp(`name=${name}`))
-  const logs = String(await plugin.tool.bg_logs.execute({ id }, ctx))
+  const logs = String(await runTool("bg_logs", { id }, ctx))
   assert.match(logs, /hi-live/)
-  const kill = String(await plugin.tool.bg_kill.execute({ id }, ctx))
+  const kill = String(await runTool("bg_kill", { id }, ctx))
   assert.match(kill, /bg_kill OK/)
 })
 
 // --- bg-wake busy-safe adapter matrisi (stub `opencode` ile, serversiz) ---
 //
 // Stub `run` = CLI enjeksiyonu simüle eder (state.json'a user mesajı yazar),
-// `export` = session export simüle eder. Modlar:
+// `session export` = session export simüle eder (V2: `opencode session export`). Modlar:
 //   idle: ilk injection'da turn de oluşur
 //   busy: ilk injection düşer (sadece user), 2. injection'da turn oluşur
 //   never: turn hiç oluşmaz | fail: run exit 1 | nopersist: run ok ama yazmaz
@@ -261,7 +306,7 @@ if (cmd === "run") {
   }
   process.exit(0);
 }
-if (cmd === "export") {
+if (cmd === "session" && a[1] === "export") {
   const s = load();
   process.stdout.write(JSON.stringify({ info: { id: "ses_x" }, messages: s.messages }));
   process.exit(0);

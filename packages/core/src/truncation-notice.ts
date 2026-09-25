@@ -1,10 +1,9 @@
 /**
  * Truncation Noticer — paylaşılan sabitler ve pure helper'lar.
  *
- * Bu dosya opencode plugin modülü tarafından iterate edilir
- * (`getLegacyPlugins` — Object.values(mod) üzerinden), dolayısıyla
- * plugin dosyası `default` dışında hiçbir şey export etmemeli.
- * Sabitler ve utility'ler burada toplanır.
+ * V2'de plugin dosyası default definition export eder; sabitler ve
+ * utility'ler burada toplanır (V1'deki getLegacyPlugins Object.values
+ * kuralının devamı niteliğinde temizlik).
  *
  * plugins/opencode-truncation-noticer.ts bu dosyayı import eder.
  * Testler de doğrudan buradan import eder (dist üzerinden).
@@ -21,11 +20,11 @@ export const DISCLOSURE_TEXT =
   `look like "<lineNo>\\t<line>" — if the last line number is below the file's ` +
   `total, the output stopped mid-file and a marker like ` +
   `"[tn] truncated: X more lines after line N (of T total). Re-read with ` +
-  `offset=N+1 limit=200, OR use bash_raw: sed -n 'N+1,Tp' <path>" will be ` +
+  `offset=N+1 limit=200, OR use nabiz_raw: sed -n 'N+1,Tp' <path>" will be ` +
   `appended. Never assume a truncated read is the full file — follow the ` +
-  `marker's offset/sed (copy-paste ready). To disable this plugin entirely, set ` +
-  `"pluginOptions.opencode-truncation-noticer.enabled": false` +
-  ` in opencode.jsonc. To bypass per-call, embed "${DEFAULT_SKIP_CONTAINS}" ` +
+  `marker's offset/sed (copy-paste ready). To disable this noticer, set ` +
+  `package-entry options {"opencode-truncation-noticer": {"enabled": false}}. ` +
+  `To bypass per-call, embed "${DEFAULT_SKIP_CONTAINS}" ` +
   `in the read args.`
 
 export function countLines(text: string): number {
@@ -64,7 +63,7 @@ export function buildMarker(
   return (
     `\n\n[tn] truncated: ${remaining} more lines after line ${lastLineNo} ` +
     `(of ${totalLines} total). Re-read with offset=${nextOffset} limit=200, ` +
-    `OR use bash_raw: ${cmdHint}\n`
+    `OR use nabiz_raw: ${cmdHint}\n`
   )
 }
 

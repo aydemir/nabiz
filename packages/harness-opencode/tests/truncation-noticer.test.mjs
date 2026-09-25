@@ -21,6 +21,7 @@ import {
   buildMarker,
 } from "nabiz-core/truncation-notice"
 import TruncationNoticePlugin from "../dist/plugins/opencode-truncation-noticer.js"
+import { setupV2, toolAfter } from "./v2-harness.mjs"
 import { bashSafeHandler } from "../dist/plugins/mcp-bash-tools/src/tools/bash_safe.js"
 
 const SEP = "\t"
@@ -74,7 +75,7 @@ test("buildMarker: contains all required parts", () => {
   assert.ok(m.includes("113 more lines"), "remaining count")
   assert.ok(m.includes("of 116 total"), "total")
   assert.ok(m.includes("offset=4"), "next offset hint")
-  assert.ok(m.includes("sed -n '4,116p' /tmp/foo.md"), "bash_raw hint")
+  assert.ok(m.includes("sed -n '4,116p' /tmp/foo.md"), "nabiz_raw hint")
 })
 
 test("end-to-end: integration with real file", () => {
@@ -154,14 +155,15 @@ function partialReadOutput(upto = 10) {
 test("watchTools: read watched by default (marker appended)", async () => {
   const { dir, f } = makeBigFile()
   try {
-    const plugin = await TruncationNoticePlugin({})
-    const output = { output: partialReadOutput(10) }
-    await plugin["tool.execute.after"](
-      { callID: "w1", tool: "read", args: { filePath: f } },
-      output,
-    )
-    assert.ok(output.output.includes(MARKER_SENTINEL), "marker appended")
-    assert.ok(output.output.includes("40 more lines after line 10"), "counts")
+    const { toolHooks } = await setupV2(TruncationNoticePlugin, {})
+    const out = await toolAfter(toolHooks, {
+      id: "w1",
+      tool: "read",
+      input: { filePath: f },
+      output: partialReadOutput(10),
+    })
+    assert.ok(out.includes(MARKER_SENTINEL), "marker appended")
+    assert.ok(out.includes("40 more lines after line 10"), "counts")
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -170,19 +172,21 @@ test("watchTools: read watched by default (marker appended)", async () => {
 test("watchTools: suffix rule watches <key>_read, ignores bread", async () => {
   const { dir, f } = makeBigFile()
   try {
-    const plugin = await TruncationNoticePlugin({})
-    const out1 = { output: partialReadOutput(10) }
-    await plugin["tool.execute.after"](
-      { callID: "w2", tool: "somekey_read", args: { filePath: f } },
-      out1,
-    )
-    assert.ok(out1.output.includes(MARKER_SENTINEL), "prefixed read watched")
-    const out2 = { output: partialReadOutput(10) }
-    await plugin["tool.execute.after"](
-      { callID: "w3", tool: "bread", args: { filePath: f } },
-      out2,
-    )
-    assert.ok(!out2.output.includes(MARKER_SENTINEL), "bread not watched")
+    const { toolHooks } = await setupV2(TruncationNoticePlugin, {})
+    const out1 = await toolAfter(toolHooks, {
+      id: "w2",
+      tool: "somekey_read",
+      input: { filePath: f },
+      output: partialReadOutput(10),
+    })
+    assert.ok(out1.includes(MARKER_SENTINEL), "prefixed read watched")
+    const out2 = await toolAfter(toolHooks, {
+      id: "w3",
+      tool: "bread",
+      input: { filePath: f },
+      output: partialReadOutput(10),
+    })
+    assert.ok(!out2.includes(MARKER_SENTINEL), "bread not watched")
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -191,19 +195,22 @@ test("watchTools: suffix rule watches <key>_read, ignores bread", async () => {
 test("watchTools: user list merges with defaults (read retained)", async () => {
   const { dir, f } = makeBigFile()
   try {
-    const plugin = await TruncationNoticePlugin({ config: { watchTools: ["mytool"] } })
-    const out1 = { output: partialReadOutput(10) }
-    await plugin["tool.execute.after"](
-      { callID: "w4", tool: "read", args: { filePath: f } },
-      out1,
-    )
-    assert.ok(out1.output.includes(MARKER_SENTINEL), "default read retained")
-    const out2 = { output: partialReadOutput(10) }
-    await plugin["tool.execute.after"](
-      { callID: "w5", tool: "mytool", args: { filePath: f } },
-      out2,
-    )
-    assert.ok(out2.output.includes(MARKER_SENTINEL), "user tool watched")
+    // V2: config tek kaynaktan gelir — ctx.options.
+    const { toolHooks } = await setupV2(TruncationNoticePlugin, { watchTools: ["mytool"] })
+    const out1 = await toolAfter(toolHooks, {
+      id: "w4",
+      tool: "read",
+      input: { filePath: f },
+      output: partialReadOutput(10),
+    })
+    assert.ok(out1.includes(MARKER_SENTINEL), "default read retained")
+    const out2 = await toolAfter(toolHooks, {
+      id: "w5",
+      tool: "mytool",
+      input: { filePath: f },
+      output: partialReadOutput(10),
+    })
+    assert.ok(out2.includes(MARKER_SENTINEL), "user tool watched")
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -211,13 +218,13 @@ test("watchTools: user list merges with defaults (read retained)", async () => {
 
 // --- cross-layer name asserts: TUI-visible tool names in user-facing texts ---
 
-test("names: tn disclosure + marker reference bash_raw (TUI name)", () => {
-  assert.ok(DISCLOSURE_TEXT.includes("bash_raw"), "disclosure mentions bash_raw")
+test("names: tn disclosure + marker reference nabiz_raw (TUI name)", () => {
+  assert.ok(DISCLOSURE_TEXT.includes("nabiz_raw"), "disclosure mentions nabiz_raw")
   const m = buildMarker(3, 116, "/tmp/foo.md", 4)
-  assert.ok(m.includes("bash_raw"), "marker mentions bash_raw")
+  assert.ok(m.includes("nabiz_raw"), "marker mentions nabiz_raw")
 })
 
-test("names: bash_safe prune marker references bash_raw (TUI name)", async () => {
+test("names: nabiz_safe prune marker references nabiz_raw (TUI name)", async () => {
   const res = await bashSafeHandler({
     command: "printf '%5000s' ''",
     description: "big spaces",
@@ -227,5 +234,5 @@ test("names: bash_safe prune marker references bash_raw (TUI name)", async () =>
   })
   const text = res.content[0].text
   assert.ok(text.includes("pruned:"), "output was pruned")
-  assert.ok(text.includes("bash_raw"), "marker points at bash_raw")
+  assert.ok(text.includes("nabiz_raw"), "marker points at nabiz_raw")
 })

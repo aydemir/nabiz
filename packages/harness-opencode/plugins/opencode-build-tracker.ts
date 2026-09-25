@@ -1,14 +1,20 @@
-import type { Plugin } from "@opencode-ai/plugin"
+import { Plugin } from "@opencode/plugin"
 import { isBuildCommand } from "nabiz-core/prune"
 import { BUILD_TRACKER_SENTINEL, BUILD_TRACKER_TEXT } from "nabiz-core/build-tracker-disclosure"
 
 interface BuildConfig {
   thresholdMs: number
   /**
+   * Ana şalter (default true). `false` ise hiçbir hook kaydolmaz —
+   * bundle (`nabiz` paketi) tek kill-switch olarak `enabled:false`'ı
+   * tüm alt pluginlere yayar.
+   */
+  enabled?: boolean
+  /**
    * Sessiz mod (default false = sessiz). `true` ise `[Build Hook] ...`
    * satırları stdout'a yazılır; Termux/OpenTUI'da bu satırlar input'ta
-   * hayalet yazı (ghost text) bırakıyordu. Kalıcı bildirim zaten
-   * `client.app.log` ile veriliyor, stdout log'u gereksiz.
+   * hayalet yazı (ghost text) bırakıyordu. Kalıcı kayıt `ctx.storage`'da
+   * (`nabiz:last-build`), debug akışı stdout'tadır.
    */
   verbose?: boolean
   /**
@@ -37,6 +43,7 @@ interface BuildSession {
 
 const DEFAULT_CONFIG: BuildConfig = {
   thresholdMs: 120000,
+  enabled: true,
   verbose: false,
   extraErrorPatterns: [],
 }
@@ -92,109 +99,140 @@ function formatDuration(ms: number): string {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
 }
 
-interface ToolAfterOutput {
-  output?: string
-  metadata?: Record<string, unknown>
+function systemText(s: unknown): string {
+  if (typeof s === "string") return s
+  if (s != null && typeof s === "object" && "text" in (s as Record<string, unknown>)) {
+    return String((s as Record<string, unknown>).text ?? "")
+  }
+  return ""
 }
 
-const BuildHooksPlugin: Plugin = async (input, options?: Record<string, unknown>) => {
-  const config: BuildConfig = { ...DEFAULT_CONFIG, ...(options ?? {}) }
-  // Additive: builtin'ler + kullanıcı desenleri. Replace yok — kullanıcı
-  // deseni ekleyince rustc/npm/tsc kapsamı kaybolmaz.
-  const errorPatterns: RegExp[] = [
-    ...BUILD_ERROR_PATTERNS,
-    ...compileExtraErrorPatterns(config.extraErrorPatterns ?? []),
-  ]
-  const sess = createSession()
-  const pendingCalls = new Map<string, number>()
-  const client = (input as unknown as { client?: { app?: { log?: (b: unknown) => Promise<void> | void } } }).client
-
-  const endSession = (status: "success" | "failed") => {
-    const duration = Date.now() - sess.startTime
-    const command = sess.command
-    const dur = formatDuration(duration)
-    // stdout'a yazma: Termux/OpenTUI'da hayalet yazı bırakıyor.
-    // Sadece verbose:true ise yaz (debug). Kalıcı log altta app.log'da.
-    if (config.verbose) {
-      console.log(
-        `[Build Hook] ${status === "success" ? "✅ onBuildSuccess" : "❌ onBuildFailure"}: ${command} — ${dur}`,
-      )
+/** V2 `Tool.Result.content`: string | Content[] — düz metne indir. */
+function resultToText(result: { content?: unknown }): string {
+  const c = result.content
+  if (typeof c === "string") return c
+  if (Array.isArray(c)) {
+    return c
+      .map((p) => {
+        if (p != null && typeof p === "object" && "text" in (p as Record<string, unknown>)) {
+          return String((p as Record<string, unknown>).text ?? "")
+        }
+        try {
+          return JSON.stringify(p)
+        } catch {
+          return String(p)
+        }
+      })
+      .join("\n")
+  }
+  if (c == null) return ""
+  if (typeof c === "object") {
+    try {
+      return JSON.stringify(c)
+    } catch {
+      return String(c)
     }
-    // 1) Kalıcı log (debug/replay)
-    if (client?.app?.log) {
-      void client.app.log({
-        body: {
+  }
+  return String(c)
+}
+
+export default Plugin.define({
+  id: "opencode-build-tracker",
+  async setup(ctx) {
+    const config: BuildConfig = { ...DEFAULT_CONFIG, ...((ctx.options ?? {}) as BuildConfig) }
+    if (config.enabled === false) return
+    // Additive: builtin'ler + kullanıcı desenleri. Replace yok — kullanıcı
+    // deseni ekleyince rustc/npm/tsc kapsamı kaybolmaz.
+    const errorPatterns: RegExp[] = [
+      ...BUILD_ERROR_PATTERNS,
+      ...compileExtraErrorPatterns(config.extraErrorPatterns ?? []),
+    ]
+    const sess = createSession()
+    const pendingCalls = new Map<string, number>()
+
+    const endSession = (status: "success" | "failed") => {
+      const duration = Date.now() - sess.startTime
+      const command = sess.command
+      const dur = formatDuration(duration)
+      // stdout'a yazma: Termux/OpenTUI'da hayalet yazı bırakıyor.
+      // Sadece verbose:true ise yaz (debug). Kalıcı kayıt altta storage'da.
+      if (config.verbose) {
+        console.log(
+          `[Build Hook] ${status === "success" ? "✅ onBuildSuccess" : "❌ onBuildFailure"}: ${command} — ${dur}`,
+        )
+      }
+      // 1) Kalıcı kayıt (V2: ctx.storage — V1'deki client.app.log karşılığı.
+      //    V2 App tipinde log yok; storage plugin-scoped durable JSON'dur.)
+      // 2) TUI toast YOK (2026-09-04): toast metni istemcide sonraki
+      //    prompt'un parts dizisine id'siz text parçası olarak sızıp oturumu
+      //    kilitliyordu. Bildirim yalnızca kalıcı kayıtta.
+      void ctx.storage
+        .set("nabiz:last-build", {
+          ts: new Date().toISOString(),
           service: "build-tracker",
           level: status === "failed" ? "error" : "info",
           message: `Build ${status}: ${command} (${dur})`,
           extra: { status, duration, command },
-        },
-      })
+        })
+        .catch(() => {})
+      sess.active = false
+      sess.command = ""
+      sess.callIDs = []
+      sess.startTime = 0
+      sess.status = "idle"
+      sess.buildCallID = null
     }
-    // 2) TUI toast KALDIRILDI (2026-09-04): toast metni istemcide sonraki
-    //    prompt'un parts dizisine id'siz text parçası olarak sızıp oturumu
-    //    kilitliyordu ("invalid user part before save" /
-    //    EventV2.InvalidDurableEvent). Bildirim yalnızca kalıcı app log'da.
-    sess.active = false
-    sess.command = ""
-    sess.callIDs = []
-    sess.startTime = 0
-    sess.status = "idle"
-    sess.buildCallID = null
-  }
-
-  return {
-    async dispose() {
-      pendingCalls.clear()
-    },
 
     // Mini-disclosure (TASK-129, ~45 token): LLM `extraErrorPatterns` +
-    // `app.log` satır anlamını oturum başında öğrenir. Sentinel-idempotent.
-    "experimental.chat.system.transform": async (_input, output) => {
-      if (output.system.some((s) => s.includes(BUILD_TRACKER_SENTINEL))) return
-      output.system.push(BUILD_TRACKER_TEXT)
-    },
+    // kayıt satır anlamını oturum başında öğrenir. Sentinel-idempotent.
+    // V1 `experimental.chat.system.transform` → V2 `session.hook("context")`.
+    await ctx.session.hook("context", (event) => {
+      if (event.system.some((s) => systemText(s).includes(BUILD_TRACKER_SENTINEL))) return
+      event.system.push({ type: "text", text: BUILD_TRACKER_TEXT })
+    })
 
-    "tool.execute.before": async (t, output) => {
-      const args = (output as { args?: unknown })?.args ?? (t as { args?: unknown }).args ?? {}
-      const cmd = getCommandFromArgs(args)
+    await ctx.tool.hook("execute.before", (event) => {
+      const cmd = getCommandFromArgs(event.input)
       if (cmd && isBuildCommand(cmd)) {
         if (sess.active) endSession("failed")
         sess.active = true
         sess.command = cmd
         sess.startTime = Date.now()
         sess.status = "running"
-        sess.buildCallID = t.callID
+        sess.buildCallID = event.id
         if (config.verbose) console.log(`[Build Hook] 🔨 onBuildStart: ${cmd}`)
       }
       if (sess.active) {
-        pendingCalls.set(t.callID, Date.now())
-        sess.callIDs.push(t.callID)
+        pendingCalls.set(event.id, Date.now())
+        sess.callIDs.push(event.id)
       }
-    },
+    })
 
-    "tool.execute.after": async (t, output) => {
+    await ctx.tool.hook("execute.after", (event) => {
       if (!sess.active) return
-      const startTime = pendingCalls.get(t.callID) ?? Date.now()
-      pendingCalls.delete(t.callID)
+      if (event.status !== "completed") {
+        pendingCalls.delete(event.id)
+        return endSession("failed")
+      }
+      const startTime = pendingCalls.get(event.id) ?? Date.now()
+      pendingCalls.delete(event.id)
       const duration = Date.now() - startTime
 
-      const outStr = (output as ToolAfterOutput).output ?? ""
+      const outStr = resultToText(event.result)
       // Build araçlarının bilinen hata formatları. Generic "error"/"failed"
       // kelime araması yorum satırı, help text gibi durumlarda false positive
       // üretiyor. Anchor'lar (^, satır başı) yorum/help'i filtreler, gerçek
       // build hata çıktısını yakalar.
       const hasError = errorPatterns.some((re) => re.test(outStr))
-      const isBuildCall = sess.buildCallID === t.callID
+      const isBuildCall = sess.buildCallID === event.id
 
-      // Surface'e (output.output) yazmıyoruz — context-saver kırpabilir,
-      // sıra bağımlılığı ortadan kalkar. Bilgi metadata'da log-only durur.
-
+      // Surface'e (result.content) yazmıyoruz — context-saver kırpabilir,
+      // sıra bağımlılığı ortadan kalkar. Bilgi storage'da log-only durur.
 
       if (hasError) {
         if (config.verbose) {
           console.log(
-            `[Build Hook] ❌ onBuildFailure: ${t.tool} — errors detected in ${formatDuration(duration)}`,
+            `[Build Hook] ❌ onBuildFailure: ${event.tool} — errors detected in ${formatDuration(duration)}`,
           )
         }
         return endSession("failed")
@@ -216,42 +254,47 @@ const BuildHooksPlugin: Plugin = async (input, options?: Record<string, unknown>
       }
 
       checkThreshold(Date.now() - sess.startTime)
-    },
+    })
 
-    // chat.message kancası: Build bilgisi endSession içinde yalnızca
-// client.app.log (kalıcı) ile bildiriliyor. showToast 2026-09-04'te
-// kaldırıldı (toast metni sonraki prompt'a sızıp oturumu kilitliyordu).
-// 2026-09-04: console.log stdout da sessize alındı (verbose:false default);
-// Termux/OpenTUI'da "[Build Hook]" satırları input'ta hayalet yazı bırakıyordu.
-// output.metadata TUI'da render edilmediği için terk edildi
-// (ağaç araştırması 2026-09-01).
-
-    event: async ({ event }) => {
-      const e = event as Record<string, unknown>
-      const type = e.type as string
-
-      if (type === "command.executed" || type === "tui.command.execute") {
-        const cmd = (e as { command?: unknown }).command ?? (e as { data?: { command?: unknown } }).data?.command ?? ""
-        if (typeof cmd === "string" && isBuildCommand(cmd)) {
-          if (!sess.active) {
-            sess.active = true
-            sess.command = cmd
-            sess.startTime = Date.now()
-            sess.status = "running"
-            if (config.verbose) console.log(`[Build Hook] 🔨 onBuildStart (event): ${cmd}`)
+    // V1 `event` hook'u → V2 `ctx.event.subscribe()`: komut/build olaylarını
+    // dinle. chat.message kancası yoktu; build bilgisi endSession içinde
+    // yalnızca kalıcı kayda yazılıyor (toast kaldırıldı 2026-09-04).
+    const controller = new AbortController()
+    void (async () => {
+      try {
+        for await (const raw of ctx.event.subscribe({ signal: controller.signal })) {
+          const e = raw as unknown as Record<string, unknown>
+          const type = e.type as string
+          if (type === "command.executed" || type === "tui.command.execute") {
+            const cmd =
+              (e as { command?: unknown }).command ??
+              (e as { data?: { command?: unknown } }).data?.command ??
+              ""
+            if (typeof cmd === "string" && isBuildCommand(cmd)) {
+              if (!sess.active) {
+                sess.active = true
+                sess.command = cmd
+                sess.startTime = Date.now()
+                sess.status = "running"
+                if (config.verbose) console.log(`[Build Hook] 🔨 onBuildStart (event): ${cmd}`)
+              }
+            }
+            continue
+          }
+          if (type === "session.idle") {
+            if (sess.active) {
+              endSession("success")
+            }
           }
         }
-        return
+      } catch {
+        // abort ile kapanır — sessiz.
       }
+    })()
 
-      if (type === "session.idle") {
-        if (sess.active) {
-          return endSession("success")
-        }
-        return
-      }
-    },
-  }
-}
-
-export default BuildHooksPlugin
+    return () => {
+      controller.abort()
+      pendingCalls.clear()
+    }
+  },
+})

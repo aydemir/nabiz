@@ -52,7 +52,7 @@ export const bashSafeSchema = {
 } as const
 
 const MARKER_FORMAT =
-  "\n\n[... pruned: {original}→{kept} chars ({saved}% saved). For raw output, call bash_raw with the same command. ...]\n\n"
+  "\n\n[... pruned: {original}→{kept} chars ({saved}% saved). For raw output, call nabiz_raw with the same command. ...]\n\n"
 
 function pruneMiddle(
   text: string,

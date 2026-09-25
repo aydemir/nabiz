@@ -27,7 +27,7 @@ export const bashRawSchema = {
       description:
         "Filesystem-safety guard: truncate output above this size. " +
         "Default 500000 (500 KB). This is NOT a prune — output is cut, " +
-        "not middle-pruned. For normal commands, prefer `bash_safe`.",
+        "not middle-pruned. For normal commands, prefer `nabiz_safe`.",
       default: 500000,
     },
     timeout_ms: {

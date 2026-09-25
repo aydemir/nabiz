@@ -15,11 +15,14 @@ import {
   resolveAgentPath,
 } from "nabiz-core/cpu-liveness-disclosure"
 import CpuLivenessPlugin from "../dist/plugins/opencode-cpu-liveness.js"
+import { setupV2, sessionContext, systemTexts } from "./v2-harness.mjs"
 
 // Monorepo: çözümleme çağıranın konumundan yapılır — harness plugin dist'i çapa.
+const THIS_DIR = dirname(fileURLToPath(new URL(".", import.meta.url)))
 const PLUGIN_URL = pathToFileURL(
-  join(dirname(fileURLToPath(new URL(".", import.meta.url))), "dist", "plugins", "opencode-cpu-liveness.js"),
+  join(THIS_DIR, "dist", "plugins", "opencode-cpu-liveness.js"),
 ).href
+const repoPluginsDir = () => join(THIS_DIR, "plugins")
 
 test("sentinel is bracketed marker", () => {
   assert.equal(CPU_LIVENESS_SENTINEL, "[cpu-liveness]")
@@ -44,6 +47,16 @@ test("resolveAgentPath: finds real agent script (no npx/registry needed)", () =>
   assert.ok(p.endsWith("cpu-liveness-agent.js"))
 })
 
+test("resolveAgentPath: source layout (V2 loads .ts in place)", () => {
+  // V2 opencode plugin KAYNAĞINI yükler: plugins/*.ts → ../scripts/...
+  const srcUrl = pathToFileURL(
+    join(repoPluginsDir(), "opencode-cpu-liveness.ts"),
+  ).href
+  const p = resolveAgentPath(srcUrl)
+  assert.ok(p, "agent path must resolve from source layout")
+  assert.ok(p.endsWith("cpu-liveness-agent.js"))
+})
+
 test("buildCpuLivenessText: absolute node path when resolved, npx fallback when null", () => {
   const withPath = buildCpuLivenessText("/x/cpu-liveness-agent.js")
   assert.ok(withPath.includes("node /x/cpu-liveness-agent.js --"))
@@ -51,41 +64,36 @@ test("buildCpuLivenessText: absolute node path when resolved, npx fallback when 
   assert.equal(buildCpuLivenessText(null), CPU_LIVENESS_TEXT)
 })
 
-test("transform hook: pushes absolute-path text (cross-project safe)", async () => {
-  const instance = await CpuLivenessPlugin({ directory: "/tmp" }, {})
-  const output = { system: [] }
-  await instance["experimental.chat.system.transform"]({}, output)
-  assert.equal(output.system.length, 1)
-  assert.ok(output.system[0].includes("cpu-liveness-agent.js"))
-  assert.ok(!output.system[0].includes("npx cpu-liveness-agent"))
+test("context hook: pushes absolute-path text (cross-project safe)", async () => {
+  const { sessionHooks } = await setupV2(CpuLivenessPlugin, {})
+  const e = await sessionContext(sessionHooks, [])
+  assert.equal(e.system.length, 1)
+  const texts = systemTexts(e.system)
+  assert.ok(texts[0].includes("cpu-liveness-agent.js"))
+  assert.ok(!texts[0].includes("npx cpu-liveness-agent"))
+  assert.equal(e.system[0].type, "text")
 })
 
-test("transform hook: pushes disclosure once (idempotent)", async () => {
-  const instance = await CpuLivenessPlugin({ directory: "/tmp" }, {})
-  const output = { system: [] }
-  await instance["experimental.chat.system.transform"]({}, output)
-  assert.equal(output.system.length, 1)
-  assert.ok(output.system[0].includes(CPU_LIVENESS_SENTINEL))
+test("context hook: pushes disclosure once (idempotent)", async () => {
+  const { sessionHooks } = await setupV2(CpuLivenessPlugin, {})
+  const e = await sessionContext(sessionHooks, [])
+  assert.equal(e.system.length, 1)
+  assert.ok(systemTexts(e.system)[0].includes(CPU_LIVENESS_SENTINEL))
   // second call: no duplicate
-  await instance["experimental.chat.system.transform"]({}, output)
-  assert.equal(output.system.length, 1)
+  const e2 = await sessionContext(sessionHooks, e.system)
+  assert.equal(e2.system.length, 1)
 })
 
-test("transform hook: skips when already disclosed", async () => {
-  const instance = await CpuLivenessPlugin({ directory: "/tmp" }, {})
-  const output = { system: ["earlier [cpu-liveness] note"] }
-  await instance["experimental.chat.system.transform"]({}, output)
-  assert.equal(output.system.length, 1)
+test("context hook: skips when already disclosed", async () => {
+  const { sessionHooks } = await setupV2(CpuLivenessPlugin, {})
+  const e = await sessionContext(sessionHooks, ["earlier [cpu-liveness] note"])
+  assert.equal(e.system.length, 1)
 })
 
-test("transform hook: enabled:false disables disclosure", async () => {
-  const instance = await CpuLivenessPlugin(
-    { directory: "/tmp", config: { enabled: false } },
-    {},
-  )
-  const output = { system: [] }
-  await instance["experimental.chat.system.transform"]({}, output)
-  assert.equal(output.system.length, 0)
+test("context hook: enabled:false disables disclosure", async () => {
+  const { sessionHooks } = await setupV2(CpuLivenessPlugin, { enabled: false })
+  const e = await sessionContext(sessionHooks, [])
+  assert.equal(e.system.length, 0)
 })
 
 test("drift guard: builder text is info-equivalent to static fallback", () => {
@@ -99,7 +107,7 @@ test("drift guard: builder text is info-equivalent to static fallback", () => {
     "0=clean",
     "--allow-kill",
     "/bin/bash -c",
-    "pluginOptions.opencode-cpu-liveness.enabled",
+    "opencode-cpu-liveness\": {\"enabled\": false}",
   ]) {
     assert.ok(CPU_LIVENESS_TEXT.includes(frag), `fallback has ${frag}`)
     assert.ok(live.includes(frag), `builder has ${frag}`)

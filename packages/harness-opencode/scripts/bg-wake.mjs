@@ -9,7 +9,7 @@
  * TUI eşzamanlılığı + persistence/scheduler wake ölçülmedi). CLI kabulü
  * yeni turn garantisi vermez.
  *
- * Busy-safe adapter (--task-id ile): `opencode export <session>` poll
+ * Busy-safe adapter (--task-id ile): `opencode session export <session>` poll
  * edilir; marker persistence + yeni assistant turn
  * (assistant.time.created > injection_ts) doğrulanır. Persistence var +
  * turn yoksa backoff ile tekrar enjekte edilir (busy-drop şüphesi:
@@ -31,7 +31,7 @@
  * bitti. Ayrıntı stdout + attempt log'dadır.
  * --dry-run: beklemez, enjekte edilecek komutu yazıp 0 döner.
  */
-import { execFile } from "node:child_process"
+import { spawn } from "node:child_process"
 import * as fs from "node:fs"
 
 const args = process.argv.slice(2)
@@ -70,8 +70,38 @@ if (!SESSION || !SOCK) {
 
 function run(file, a, timeoutMs) {
   return new Promise((resolve) => {
-    execFile(file, a, { encoding: "utf8", timeout: timeoutMs }, (err, stdout, stderr) => {
-      resolve({ err, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") })
+    // spawn + açık stdio (execFile DEĞİL): execFile `stdio:["ignore",...]`
+    // ayarını stdin'e uygulamaz (fd0 socket kalır) ve `opencode run`
+    // açık stdin borusunda SONSUZA dek asılır (canlı kanıt 2026-09-25).
+    // spawn stdio dizisini harfiyen uygular: stdin /dev/null (anında EOF),
+    // stdout/stderr pipe (çıktı parse ediliyor).
+    let child
+    try {
+      child = spawn(file, a, { stdio: ["ignore", "pipe", "pipe"] })
+    } catch (e) {
+      resolve({ err: e, stdout: "", stderr: String(e?.message ?? e) })
+      return
+    }
+    let stdout = ""
+    let stderr = ""
+    const timer = setTimeout(() => {
+      try {
+        child.kill("SIGTERM")
+      } catch { /* zaten ölmüş */ }
+    }, timeoutMs)
+    if (child.stdout) child.stdout.on("data", (d) => { stdout += String(d) })
+    if (child.stderr) child.stderr.on("data", (d) => { stderr += String(d) })
+    child.on("error", (e) => {
+      clearTimeout(timer)
+      resolve({ err: e, stdout, stderr })
+    })
+    child.on("close", (code, signal) => {
+      clearTimeout(timer)
+      const err =
+        code === 0
+          ? null
+          : new Error(`Command failed: ${file} ${a.join(" ")} (code ${code}, signal ${signal ?? "?"})`)
+      resolve({ err, stdout, stderr })
     })
   })
 }
@@ -145,10 +175,11 @@ async function inject(state, code) {
   return { ok: true, ts: injection_ts }
 }
 
-/** `opencode export <session>` — persistence + turn doğrulama kaynağı
- *  (status endpoint keşfi zorunlu bağımlılık değildir). */
+/** `opencode session export <session>` — persistence + turn doğrulama kaynağı
+ *  (status endpoint keşfi zorunlu bağımlılık değildir).
+ *  V2 notu: `opencode export` V1 komutuydu; 2.x'te `session export` altında. */
 async function readExport() {
-  const d = await run("opencode", ["export", SESSION], 60000)
+  const d = await run("opencode", ["session", "export", SESSION], 60000)
   if (d.err) return { ok: false, error: String(d.err.message ?? d.err) }
   try {
     const j = JSON.parse(d.stdout)

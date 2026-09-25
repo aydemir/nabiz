@@ -45,9 +45,9 @@ export const DISCLOSURE_TEXT =
   `cpu-liveness-agent is only a second layer for CPU-bound + --allow-kill. ` +
   `Builds gone silent without a final (stale heartbeat, default 180s) get ` +
   `a one-time "[sn] stale:" note instead — a dead monitor is suspected. ` +
-  `To disable entirely, set ` +
-  `"pluginOptions.opencode-settle-noticer.enabled": false` +
-  ` in opencode.jsonc. To bypass per-call, embed "${DEFAULT_SKIP_CONTAINS}" ` +
+  `To disable this noticer, set ` +
+  `package-entry options {"opencode-settle-noticer": {"enabled": false}}. ` +
+  `To bypass per-call, embed "${DEFAULT_SKIP_CONTAINS}" ` +
   `in the tool args.`
 
 export interface SettleRecord {

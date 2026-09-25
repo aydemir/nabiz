@@ -2,6 +2,7 @@
 
 > Statü (2026-09-24): Faz 1 ✓ · Faz 2 ✓ · Faz 3 ✓ · Faz 4 kısmi
 > (`docs/decisions.md` taşındı, README yönlendirmesi push'landı, repo arşivi bekliyor).
+> Statü (2026-09-25): Faz 5 ✓ — opencode 2.x API + `nabiz` markası (aşağıya bak).
 
 Karar: `docs/decisions.md` (2026-09-24 04:37) — tek repo `aydemir/nabiz`,
 harness başına ayrı paket + paylaşılan core; hbmon daemon ayrı repoda kalır.
@@ -65,8 +66,23 @@ Doğrulama: `tsc --noEmit` temiz + mock-pi canlı smoke 13/13.
    (ağaç kirli olduğu için ertelendi). `index.json`/`tasks/` history için
    salt-okunur kalır.
 
+## Faz 5 — opencode 2.x + nabiz markası (bitti ✓ 2026-09-25)
+
+1. Altı plugin V2 `Plugin.define` modeline taşındı; `plugin/` bundle
+   paketi tek `nabiz` id'siyle yüklenir (canlı kanıt: disclosure + prune +
+   bg wakeup). Seçenekler `{package, options}` + `<plugin-id>` alt-çantası
+   (resmi şemada `pluginOptions` yok; disclosure metinleri buna göre düzeltildi).
+2. MCP key + server adı `nabiz` (`nabiz_safe`/`nabiz_raw`); `skipTools`
+   `bash_*` legacy alias tutar. `setup.mjs` paket girdisi yazar, stale
+   dosya girdilerini + eski symlink'leri temizler, `mcp.bash` (bizim
+   dist) → `mcp.nabiz` taşır.
+3. Canlı geçiş: legacy `plugin` dosya listesi silindi, `plugins:
+   [<repo>/plugin]` + `mcp.nabiz` yazıldı, `mcp.bm` söküldü.
+
 ## Kurallar
 
 - Geriye uyumluluk: plugin public API + disclosure metinleri değişmez.
+  (SUPERSEDED Faz 5: opencode 2.x V1 API'yi çalıştırmıyor — API + metinler
+  V2'ye taşındı; `bash_*` adları alias olarak korunur.)
 - Test ile bitir: her faz `tsc` + ilgili suite yeşil olmadan kapanmaz.
 - Yarım iş yok: faz bitmeden sonraki faza geçilmez.
