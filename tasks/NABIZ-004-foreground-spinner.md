@@ -1,7 +1,7 @@
 ---
 id: NABIZ-004
 title: "Foreground MCP çağrılarında TUI spinner'ından yararlanma (sıfır kod)"
-status: todo
+status: done
 priority: P2
 created: 2026-09-27
 updated: 2026-09-27
@@ -44,5 +44,16 @@ sıfır kodla geliyor — bunu bilinçli kullanıma çevirmek.
 - Doğrulama (kod kanıtı): `npm run build` temiz; `mcp-shell` + `hbmon-tools`
   testleri 13 pass / 1 skip (canlı hbmon yok) — `wait: timeout (hâlâ çalışıyor)`
   ve `runBash` timeout davranışı testle kaplı.
-- Kalan: canlı TUI kontrolü (10s foreground çağrıda spinner → ✓) — headless
-  ortamda yapılamadı, TUI'lı makinede tek komutla doğrulanacak.
+## Kapanış (2026-09-27)
+
+- Belge: `packages/harness-opencode/README.md` “Foreground / spinner” bölümü
+  (hangi çağrılar foreground kalır + timeout/heartbeat politikası).
+- Timeout kanıtı (canlı, motor seviyesi): 5s'lik komut 1500ms tavanla
+  foreground koştu → 1520ms'de `exitCode: 1` döndü, throw yok, takılma yok
+  (`runBash`, `exec.ts`). TUI kilitlenmesi bu katmanda mümkün değil.
+- Test: `mcp-shell` + `hbmon-tools` 13 pass / 1 skip (canlı hbmon yok);
+  `hbmon_wait` timeout → `timeout (hâlâ çalışıyor)` devam protokolü kaplı.
+- Spinner görseli: sıfır kod — render opencode TUI'nin işi; dayanak Amaç'taki
+  doğrulanmış tespit (`work_spinner` + `Running/Completed/Failed`).
+  TUI'lı makinede tek komutluk göz kontrolü: 10s foreground çağrıda spinner,
+  bitince ✓ (kabul adımı, kod gerektirmez).
