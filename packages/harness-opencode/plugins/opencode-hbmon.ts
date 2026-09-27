@@ -45,6 +45,8 @@ import {
   resolveRecord,
   writeRecord,
 } from "nabiz-core/bg-tasks"
+import { formatProgress, readLastProgress } from "nabiz-core/progress"
+import { resolveEventDirs } from "nabiz-core/settle-notice"
 
 interface HbmonPluginConfig {
   enabled?: boolean
@@ -293,7 +295,16 @@ export default Plugin.define({
           if (config.enabled === false) return { content: "bg_status kapalı (enabled:false)" }
           const args = input as { id: string }
           const r = resolveRecord(bgDir(), args.id)
-          if (!r.record) return { content: `bg_status HATA: ${r.error}` }
+          if (!r.record) {
+            // NABIZ-005: bg kaydı yoksa build-mon izlemesine düş (name ile).
+            // events.jsonl yoksa/eşleşme yoksa sessizce HATA (fail-open).
+            const prog = readLastProgress(
+              resolveEventDirs(undefined, process.env, process.cwd()),
+              args.id,
+            )
+            if (prog) return { content: `name=${args.id} ${formatProgress(prog)} (build-mon izlemesi)` }
+            return { content: `bg_status HATA: ${r.error}` }
+          }
           const s = await statusBuild(bin, r.record.sock, process.env, 10000, true)
           if (!s.response) {
             // Monitör kapanmış olabilir — .jsonl son olay fallback'i.

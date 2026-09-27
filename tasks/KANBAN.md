@@ -17,7 +17,7 @@ katmanıdır.
 | NABIZ-002 | Task registry persist (restart durability) | done (registry 0600 + merge) | P1 |
 | NABIZ-003 | bg_logs wait_ms (hbmon wait reuse) | done (wait 17/17 canlı) | P2 |
 | NABIZ-004 | Foreground MCP çağrılarında TUI spinner'ı (sıfır kod) | done (README + motor kanıtı) | P2 |
-| NABIZ-005 | Background işler için progress watcher (event-driven) | todo | P3 |
+| NABIZ-005 | Background işler için progress watcher (event-driven) | done (events reuse + bg_status) | P3 |
 | NABIZ-006 | Windows npm workspace symlink (EPERM) | todo (not eklendi, canlı kanıt bekler) | P2 |
 
 Sıra: `NABIZ-001 → NABIZ-002 → NABIZ-003` (003, 001'e bağlı; 001-002 bağımsız,

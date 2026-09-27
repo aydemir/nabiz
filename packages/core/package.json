@@ -12,6 +12,7 @@
     "./cpu-liveness-disclosure": "./dist/cpu-liveness-disclosure.js",
     "./disclosure": "./dist/disclosure.js",
     "./hbmon-tools": "./dist/hbmon-tools.js",
+    "./progress": "./dist/progress.js",
     "./prune": "./dist/prune.js",
     "./raw-refill": "./dist/raw-refill.js",
     "./settle-notice": "./dist/settle-notice.js",
