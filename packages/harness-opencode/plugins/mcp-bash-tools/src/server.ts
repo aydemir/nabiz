@@ -29,7 +29,7 @@ const TOOLS = [
       "Execute a bash command and return its output. If output exceeds " +
       "`max_chars`, it is middle-pruned with a `[... pruned: ...]` marker. " +
       "Use this for normal commands where compact output is fine. For full " +
-      "unpruned output, call `bash_raw` with the same `command` instead.",
+      "unpruned output, call `nabiz_raw` with the same `command` instead.",
     inputSchema: bashSafeSchema,
     handler: bashSafeHandler,
   },
