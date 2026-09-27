@@ -58,7 +58,8 @@ Foreground kalanlar (kısa + bloklayan):
 - `hbmon_watch` / `hbmon_status`, `bg_status` / `bg_logs` / `bg_kill`:
   hızlı handshake/sorgu, foreground kalır.
 - Uzun işler için `bg_run` (hemen döner) + `bg-wake.mjs` bekçisi; ara
-  durum NABIZ-005'in işi, final `[sn] settled` ile gelir.
+  durum için `bg_status` build-mon izlemesine düşer (`events.jsonl`
+  reuse, NABIZ-005), final `[sn] settled` ile gelir.
 
 Timeout/heartbeat politikası (kanıt: kod):
 

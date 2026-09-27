@@ -23,6 +23,7 @@ npm run build --workspace nabiz-core   # tsc → dist/
 | `nabiz-core/disclosure` | shared disclosure texts |
 | `nabiz-core/*-disclosure` | per-plugin disclosure texts |
 | `nabiz-core/settle-notice` | finished-build notification helpers |
+| `nabiz-core/progress` | build-mon progress reads (`events.jsonl` reuse, no polling) |
 | `nabiz-core/truncation-notice` | read-truncation notice helpers |
 | `nabiz-core/raw-refill` | raw-output refill helpers |
 

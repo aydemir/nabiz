@@ -29,7 +29,8 @@ npm install
 npm run build
 ```
 
-Output: `dist/server.js`
+Output: `dist/plugins/mcp-bash-tools/src/server.js` (repo kökünden;
+üst paketin `tsc` derlemesi üretir — bu paketin kendi `build` scripti yoktur).
 
 ## Register in opencode
 

@@ -58,7 +58,7 @@ Bilinçli kararlar:
   isimleri çakışır. Aynı şekilde `hbmon-bg.ts` ile aynı anda yükleme (yerini alır).
 - Doğrulama: `tsc --noEmit` temiz + canlı daemon smoke (watch/handshake,
   `status --compact` state/code, `.out` içerik, `kill`, `list` adopt şekli).
-- NABIZ ekleri (board bitti, `tasks/`): NABIZ-001 `bg_logs` cursor
+- NABIZ ekleri (board: NABIZ-001…005 done, NABIZ-006 todo — `tasks/`): NABIZ-001 `bg_logs` cursor
   (`offset`/`next_offset` + tekrar uyarısı), NABIZ-002 registry persist
   (`~/.pi/bg-hbmon-registry.json`, `0600`, atomik yazım), NABIZ-003 `bg_logs`
   `wait_ms` (dilimli daemon `wait` + `.out` büyüme kontrolü; daemon yeni

@@ -3,6 +3,7 @@
 > Statü (2026-09-24): Faz 1 ✓ · Faz 2 ✓ · Faz 3 ✓ · Faz 4 kısmi
 > (`docs/decisions.md` taşındı, README yönlendirmesi push'landı, repo arşivi bekliyor).
 > Statü (2026-09-25): Faz 5 ✓ — opencode 2.x API + `nabiz` markası (aşağıya bak).
+> Statü (2026-09-27): Faz 6 ✓ — NABIZ-004/005/006 + CI (ubuntu + windows).
 
 Karar: `docs/decisions.md` (2026-09-24 04:37) — tek repo `aydemir/nabiz`,
 harness başına ayrı paket + paylaşılan core; hbmon daemon ayrı repoda kalır.
@@ -14,7 +15,7 @@ Marka: pi harness = `nabız`.
 nabiz/
   packages/core/               # host-bağımsız motor (saf TS, opencode/pi importu YOK)
     src/{bg-tasks,build-tracker-disclosure,cpu-liveness-disclosure,
-         disclosure,hbmon-tools,prune,raw-refill,settle-notice,
+         disclosure,hbmon-tools,progress,prune,raw-refill,settle-notice,
          truncation-notice}.ts
   packages/harness-opencode/   # opencode adaptörü (6 plugin + server.ts barrel)
     src/*.ts + mcp-bash-tools/ + scripts/ + tests/
@@ -78,6 +79,17 @@ Doğrulama: `tsc --noEmit` temiz + mock-pi canlı smoke 13/13.
    dist) → `mcp.nabiz` taşır.
 3. Canlı geçiş: legacy `plugin` dosya listesi silindi, `plugins:
    [<repo>/plugin]` + `mcp.nabiz` yazıldı, `mcp.bm` söküldü.
+
+## Faz 6 — extension işleri + CI (bitti ✓ 2026-09-27)
+
+1. NABIZ-004: foreground spinner dokümante edildi (`harness-opencode`
+   README "Foreground / spinner" + motor timeout kanıtı; sıfır kod).
+2. NABIZ-005: progress watcher — `events.jsonl` reuse, tüketici `bg_status`
+   zenginleştirmesi; motor `nabiz-core/progress` (timer yok, fail-open).
+3. NABIZ-006: Windows symlink — `scripts/check-symlink.mjs` preflight +
+   README notları (CI kanıtı var, kilitli-hesap kanıtı todo).
+4. CI (`.github/workflows/ci.yml`): `build-linux` (`npm ci` + tam suite) +
+   `build-windows` (`npm install` + hedefli testler); Node 22, actions v5.
 
 ## Kurallar
 
