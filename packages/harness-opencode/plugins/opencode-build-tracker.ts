@@ -259,6 +259,21 @@ export default Plugin.define({
     // V1 `event` hook'u → V2 `ctx.event.subscribe()`: komut/build olaylarını
     // dinle. chat.message kancası yoktu; build bilgisi endSession içinde
     // yalnızca kalıcı kayda yazılıyor (toast kaldırıldı 2026-09-04).
+    // NABIZ-007: native background shell (`POST /session/:id/shell`) tool
+    // hattından geçmez; bitimi `session.shell.started/ended` olaylarından
+    // izlenir (SDK 2.0.16 sözleşmesi; binary'de doğrulandı:
+    // `session.shell.ended` var, `session.next.*` yok).
+    const startFromEvent = (cmd: string, where: string) => {
+      if (!sess.active) {
+        sess.active = true
+        sess.command = cmd
+        sess.startTime = Date.now()
+        sess.status = "running"
+        if (config.verbose) console.log(`[Build Hook] 🔨 onBuildStart (${where}): ${cmd}`)
+      }
+    }
+    const shellData = (e: Record<string, unknown>) =>
+      (e as { data?: { shell?: { command?: unknown }; output?: { output?: unknown } } }).data
     const controller = new AbortController()
     void (async () => {
       try {
@@ -271,13 +286,25 @@ export default Plugin.define({
               (e as { data?: { command?: unknown } }).data?.command ??
               ""
             if (typeof cmd === "string" && isBuildCommand(cmd)) {
-              if (!sess.active) {
-                sess.active = true
-                sess.command = cmd
-                sess.startTime = Date.now()
-                sess.status = "running"
-                if (config.verbose) console.log(`[Build Hook] 🔨 onBuildStart (event): ${cmd}`)
-              }
+              startFromEvent(cmd, "event")
+            }
+            continue
+          }
+          if (type === "session.shell.started") {
+            const cmd = shellData(e)?.shell?.command
+            if (typeof cmd === "string" && isBuildCommand(cmd)) {
+              startFromEvent(cmd, "event:shell")
+            }
+            continue
+          }
+          if (type === "session.shell.ended") {
+            const d = shellData(e)
+            const cmd = d?.shell?.command
+            if (typeof cmd === "string" && isBuildCommand(cmd)) {
+              if (!sess.active) startFromEvent(cmd, "event:shell")
+              const out = d?.output?.output
+              const hasError = typeof out === "string" && errorPatterns.some((re) => re.test(out))
+              endSession(hasError ? "failed" : "success")
             }
             continue
           }

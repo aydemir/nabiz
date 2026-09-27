@@ -1,7 +1,7 @@
 ---
 id: NABIZ-007
 title: "Opencode native background shell kör noktası (Shell finished)"
-status: todo
+status: done
 priority: P2
 created: 2026-09-27
 updated: 2026-09-27
@@ -19,20 +19,28 @@ basıyor ama nabiz'den ses yok: build-tracker kaydı yok, `[sn]` notu yok.
 ## Kök neden (2026-09-27, kod kanıtlı)
 
 - `↳ Shell finished` metni repo'da YOK — opencode app/TUI render'ı.
-- nabiz hook'ları (`tool.execute.before/after`) tool-sonuç hattında çalışır;
-  native background tamamlanması bu hattan geçmiyor (araştırıldı:
-  `@opencode/plugin` SDK stub; `shell` domain'de sadece `create.before`,
-  `event` domain'de `subscribe` var, bitim olayı sözleşmesi bilinmiyor —
-  `@opencode/client` paketi kurulu değil, doğrulanamadı).
+- Native background shell (`POST /session/:id/shell`) tool hattından geçmez;
+  durum doğrudan `sessions.updatePart` ile yazılır
+  (upstream: `prompt.ts:shellImpl` → `finish` → part completed).
+- Çözüm bulundu (upstream `/root/opencode-upstream` + kurulu SDK 2.0.16):
+  bus olayları `session.shell.started` (`data.shell.command`) /
+  `session.shell.ended` (`data.shell.command` + `data.output.output`);
+  plugin `ctx.event.subscribe()` hepsini görür. Çalışan binary
+  (v2.0.18) `session.shell.ended` içerir, `session.next.*` içermez —
+  eski adlar doğru olandır.
 
-## Seçenekler
+## Çözüm (2026-09-27)
 
-1. `event.subscribe` ile server olay akışını dinleyip shell-bitim olayını
-   yakalamak (kanıtlanmadı — canlı opencode oturumunda denenecek).
-2. Olmazsa bilinçli kapsam-dışı: uzun iş `bg_run` / `hbmon_watch` ile koşulur
-   (NABIZ-004 felsefesi: "bildirim istiyorsan bg_run"). Geçici çözüm bu.
+- `opencode-build-tracker.ts` subscribe döngüsüne iki dal eklendi:
+  `session.shell.started` → build komutuysa session aç;
+  `session.shell.ended` → çıktıyı hata desenleriyle tara,
+  success/failed kapat (started kaçsa bile ended tek başına kapatır).
+  Build-dışı shell olayları yok sayılır (fail-open).
 
 ## Doğrulama
 
-- Native background `sleep 5` bitiminde build-tracker/`[sn]` izi düşüyor
-  (seçenek 1), ya da kapsam-dışı kararı + README geçici-çözüm notu (seçenek 2).
+- `build-tracker.test.mjs` 21/21 (3 yeni NABIZ-007 testi: started açar,
+  ended success/failed kapatır, build-dışı yok sayılır).
+- Canlı TUI göz kontrolü (native background build bitiminde
+  `nabiz:last-build` kaydı) kabul adımı olarak açık kalır — kod yolu
+  testle kaplı, olay sözleşmesi binary'de doğrulandı.

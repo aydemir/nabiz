@@ -19,7 +19,7 @@ katmanıdır.
 | NABIZ-004 | Foreground MCP çağrılarında TUI spinner'ı (sıfır kod) | done (README + motor kanıtı) | P2 |
 | NABIZ-005 | Background işler için progress watcher (event-driven) | done (events reuse + bg_status) | P3 |
 | NABIZ-006 | Windows npm workspace symlink (EPERM) | todo (not eklendi, canlı kanıt bekler) | P2 |
-| NABIZ-007 | Native background shell kör noktası (Shell finished) | todo | P2 |
+| NABIZ-007 | Native background shell kör noktası (Shell finished) | done (shell.started/ended takibi) | P2 |
 
 Sıra: `NABIZ-001 → NABIZ-002 → NABIZ-003` (003, 001'e bağlı; 001-002 bağımsız,
 paralel yapılabilir). `NABIZ-004 ↔ NABIZ-005` bağımsız, paralel yapılabilir;

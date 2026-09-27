@@ -257,3 +257,66 @@ test("build-tracker: session.idle event closes an open build session", async () 
   assert.ok(store.get("nabiz:last-build").message.includes("Build success"))
   await cleanup()
 })
+
+test("build-tracker: session.shell.started starts a build session (NABIZ-007)", async () => {
+  const cap = captureConsole()
+  try {
+    const { pushEvent, cleanup } = await setupV2(BuildHooksPlugin, { verbose: true })
+    pushEvent({ type: "session.shell.started", data: { shell: { command: "npm run build" } } })
+    await tick()
+    assert.ok(cap.logs.some((l) => l.includes("onBuildStart")), "shell.started build'i başlatmalı")
+    await cleanup()
+  } finally {
+    cap.restore()
+  }
+})
+
+test("build-tracker: session.shell.ended closes session success/failed (NABIZ-007)", async () => {
+  const cap = captureConsole()
+  try {
+    const { pushEvent, store, cleanup } = await setupV2(BuildHooksPlugin, { verbose: true })
+    pushEvent({ type: "session.shell.started", data: { shell: { command: "npm run build" } } })
+    await tick()
+    pushEvent({
+      type: "session.shell.ended",
+      data: { shell: { command: "npm run build" }, output: { output: "build succeeded", cursor: 0, size: 0, truncated: false } },
+    })
+    await tick()
+    assert.ok(store.get("nabiz:last-build").message.includes("Build success"), "temiz çıktı success")
+    await cleanup()
+  } finally {
+    cap.restore()
+  }
+  const cap2 = captureConsole()
+  try {
+    const { pushEvent, store, cleanup } = await setupV2(BuildHooksPlugin, { verbose: true })
+    pushEvent({
+      type: "session.shell.ended",
+      data: { shell: { command: "cargo build" }, output: { output: "npm ERR! code 1\nfailed", cursor: 0, size: 0, truncated: false } },
+    })
+    await tick()
+    assert.ok(store.get("nabiz:last-build").message.includes("Build failed"), "hatalı çıktı failed (started kaçsa bile)")
+    await cleanup()
+  } finally {
+    cap2.restore()
+  }
+})
+
+test("build-tracker: non-build shell events are ignored (NABIZ-007)", async () => {
+  const cap = captureConsole()
+  try {
+    const { pushEvent, store, cleanup } = await setupV2(BuildHooksPlugin, { verbose: true })
+    pushEvent({ type: "session.shell.started", data: { shell: { command: "echo hello" } } })
+    await tick()
+    pushEvent({
+      type: "session.shell.ended",
+      data: { shell: { command: "echo hello" }, output: { output: "hello", cursor: 0, size: 0, truncated: false } },
+    })
+    await tick()
+    assert.ok(!cap.logs.some((l) => l.includes("onBuildStart")))
+    assert.equal(store.get("nabiz:last-build"), undefined)
+    await cleanup()
+  } finally {
+    cap.restore()
+  }
+})
