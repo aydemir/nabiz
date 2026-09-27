@@ -43,6 +43,9 @@ pi install /root/nabiz
 
 # workspaces: install links + build the shared engine
 npm install && npm run build
+# Windows: EPERM/symlink on npm install -> run terminal as admin or enable
+# Developer Mode (Settings -> Privacy & Security -> For developers).
+# Preflight (before install): node scripts/check-symlink.mjs
 ```
 
 ## Requirements

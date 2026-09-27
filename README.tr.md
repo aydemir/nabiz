@@ -43,6 +43,9 @@ pi install /root/nabiz
 
 # workspaceler: linkler + paylaşılan motorun derlenmesi
 npm install && npm run build
+# Windows: npm install'da EPERM/symlink -> terminali yönetici aç ya da
+# Geliştirici Modu'nu etkinleştir (Ayarlar -> Gizlilik ve Güvenlik).
+# Ön-kontrol (kurulumdan önce): node scripts/check-symlink.mjs
 ```
 
 ## Gereksinim
