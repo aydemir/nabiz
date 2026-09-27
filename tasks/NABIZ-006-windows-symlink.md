@@ -30,11 +30,15 @@ Windows'ta `npm install` workspace linklerini symlink ile kurar
   Dürüst sınır: hosted runner'lar admin koşar, kilitli makinedeki EPERM
   birebir üremez — EPERM'i kurulum öncesi `scripts/check-symlink.mjs`
   fail-loud yakalar (tmpdir'de symlink dener, EPERM'de çözüm mesajı).
+- Kanıt (PR #1, `ci/nabiz-004-006`): iki koşu da yeşil. Windows Server 2025
+  logu: `npm install` 17s'de 402 paket, build temiz, `nabiz-core` +
+  `nabiz-opencode` SYMLINK, hedefli testler 13 pass / 1 skip; linux'ta tam
+  suite geçti. CI node 22'ye alındı (node 20 runner-deprecated + pi
+  paketlerinden EBADENGINE uyarısı veriyordu).
 - Yapılacaklar
-  - Gerçek Windows makinede `node scripts/check-symlink.mjs` + `npm install`
-    + `npm run build` kanıtı (kilitli kullanıcı hesabında preflight'ın
-    exit 1 + çözüm mesajı verdiği de doğrulanmalı).
-  - İlk CI koşusunu yeşil gör (push sonrası Actions sekmesi).
+  - Gerçek kilitli Windows hesabında `node scripts/check-symlink.mjs`'in
+    exit 1 + çözüm mesajı verdiği doğrulanmalı (CI runner'ı admin olduğu
+    için bu senaryo CI'da üretilemiyor).
 
 ## Doğrulama
 
