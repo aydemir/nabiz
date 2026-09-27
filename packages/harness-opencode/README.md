@@ -43,6 +43,36 @@ alt-çantası üstüne yazar. `enabled: false` (kök) tüm paketi kapatır
 (tek kill-switch). Resmi şemada `pluginOptions` anahtarı YOKTUR (V1
 artığı) — seçenekler buradan verilir.
 
+## Foreground / spinner (NABIZ-004)
+
+Opencode TUI `running` durumundaki her tool çağrısına otomatik
+`work_spinner` çizer (sunucu SSE → istemci kozmetiği; TUI kodu bizde
+değil, değiştirilmez). Kural: **spinner istiyorsan foreground çağır.**
+
+Foreground kalanlar (kısa + bloklayan):
+
+- `nabiz_safe` / `nabiz_raw` (MCP): `timeout_ms` default 30000.
+- `hbmon_wait`: daemon tavanı default 50s (`defaultTimeoutSec`),
+  gateway ~60s altı tutulur; `timeout (hâlâ çalışıyor)` dönerse aynı
+  sock ile tekrar çağır (kesinti değil, devam protokolü).
+- `hbmon_watch` / `hbmon_status`, `bg_status` / `bg_logs` / `bg_kill`:
+  hızlı handshake/sorgu, foreground kalır.
+- Uzun işler için `bg_run` (hemen döner) + `bg-wake.mjs` bekçisi; ara
+  durum NABIZ-005'in işi, final `[sn] settled` ile gelir.
+
+Timeout/heartbeat politikası (kanıt: kod):
+
+- `nabiz_safe`/`raw` → `runBash` (`plugins/mcp-bash-tools/src/exec.ts`):
+  `exec` timeoutunda `exitCode: 1` + `stdout`/`stderr` korunur,
+  `durationMs` döner — tool `error` fırlatmaz, TUI takılmaz.
+- `hbmon_*` → `runHbmon` (`packages/core/src/hbmon-tools.ts`,
+  `execTimeoutMs` default 70000): spawn timeoutunda
+  `error: "hbmon çağrısı zaman aşımı (…ms)"` ile çözülür; `ENOENT`
+  ise kurulum ipucu (`cargo install hbmon`, exit 127) döner.
+- Canlı TUI kontrolü (10s foreground çağrıda spinner → `✓`) bu repo
+  dışında yapılır (headless kanıt yok); eşik aşımında davranış yukarıdaki
+  gibidir.
+
 ## Build / test
 
 ```bash
@@ -50,6 +80,15 @@ npm run build --workspace nabiz-opencode   # tsc → dist/
 npm test --workspace nabiz-opencode        # node --test suite
 node packages/harness-opencode/scripts/setup.mjs --check
 ```
+
+Windows notu: `npm install` workspace linklerini symlink ile kurar
+(`node_modules/nabiz-core` → `packages/core`). EPERM/symlink hatası
+alırsan terminali yönetici olarak çalıştır ya da Geliştirici Modu'nu aç
+(Ayarlar → Gizlilik ve Güvenlik → Geliştiriciler için). Not: npm'in
+`--install-links=false` bayrağı workspaces'e etki etmez (npm docs) —
+workspace linkleri her zaman symlink'tir, bu yüzden yetki şart.
+Ön-kontrol: `node scripts/check-symlink.mjs` (kurulumdan önce çalıştır;
+symlink kuramıyorsa EPERM'i anlaşılır mesajla yakalar).
 
 ## Layout
 

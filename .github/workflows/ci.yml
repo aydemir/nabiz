@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: node scripts/check-symlink.mjs
+      - run: npm ci
+      - run: npm run build
+      - run: npm test --workspace nabiz-opencode
+
+  build-windows:
+    # NABIZ-006: kullanıcı akışının birebiri (npm install + build).
+    # Dürüst sınır: hosted runner'lar yönetici yetkisiyle koşar, bu yüzden
+    # kilitli bir kullanıcı makinesindeki EPERM burada birebir üremez;
+    # bu job Windows'a özgü derleme kırılmalarını yakalar, EPERM'i ise
+    # scripts/check-symlink.mjs kurulum öncesi fail-loud yakalar.
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: node scripts/check-symlink.mjs
+      - run: npm install
+      - run: npm run build
+      - name: workspace linkleri symlink mi (rapor)
+        run: node -e "const fs=require('fs');for(const p of ['node_modules/nabiz-core','node_modules/nabiz-opencode']){try{console.log(p,fs.lstatSync(p).isSymbolicLink()?'SYMLINK':'COPY')}catch(e){console.log(p,'YOK:'+e.code)}}"
+      - name: hedefli testler (hbmon ikiliği gerekmez)
+        run: node --test --test-reporter=spec packages/harness-opencode/tests/mcp-shell.test.mjs packages/harness-opencode/tests/hbmon-tools.test.mjs
