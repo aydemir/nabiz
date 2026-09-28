@@ -20,7 +20,7 @@ katmanıdır.
 | NABIZ-005 | Background işler için progress watcher (event-driven) | done (events reuse + bg_status) | P3 |
 | NABIZ-006 | Windows npm workspace symlink (EPERM) | todo (not eklendi, canlı kanıt bekler) | P2 |
 | NABIZ-007 | Native background shell kör noktası (Shell finished) | done (shell.started/ended takibi) | P2 |
-| NABIZ-008 | hbmon kill-switch'i yapısal (7 tool kayıt altında) | todo | P2 |
+| NABIZ-008 | hbmon kill-switch'i yapısal (7 tool kayıt altında) | done (erken-dönüş + `[hbmon-disabled]` disclosure, 3 test) | P2 |
 | NABIZ-009 | bg_logs tail_bytes sözleşmesi ↔ gerçek cap (512000 ↔ 51200) | done P1 (açıklama + `capped=`); P2 politika açık | P1 |
 | NABIZ-010 | Wake mesajı üçlü kopyası (core `wakeMessage` üretimde ölü) | todo | P2 |
 

@@ -129,3 +129,47 @@ test("bundle: build-tracker enabled:false tek başına da susar", async () => {
     await cleanup?.()
   }
 })
+
+test("bundle: hbmon enabled:false yapısal susar + kapalı disclosure (NABIZ-008)", async () => {
+  const hbmon = (await import("../dist/plugins/opencode-hbmon.js")).default
+  const { sessionHooks, toolHooks, addedTools, cleanup } = await setupV2(hbmon, { enabled: false })
+  try {
+    // 7 tool hiç kaydolmaz (stub yok, "unknown tool" döner)
+    assert.deepEqual(addedTools, [])
+    assert.deepEqual(Object.keys(toolHooks), [])
+    // tek görünür iz: neden-yok disclosure'ı, oturum açılışında bir kez
+    const e = await sessionContext(sessionHooks, [])
+    assert.ok(systemTexts(e.system).join("\n").includes("[hbmon-disabled]"))
+    assert.match(systemTexts(e.system).join("\n"), /opencode-hbmon kapalı, bg_run yok/)
+    const e2 = await sessionContext(sessionHooks, systemTexts(e.system))
+    assert.equal(e2.system.length, e.system.length)
+  } finally {
+    await cleanup?.()
+  }
+})
+
+test("bundle: hbmon enabled (default) 7 tool + davranış aynı (NABIZ-008 regresyon)", async () => {
+  const hbmon = (await import("../dist/plugins/opencode-hbmon.js")).default
+  const { addedTools, cleanup } = await setupV2(hbmon, {})
+  try {
+    for (const name of ["hbmon_watch", "hbmon_wait", "hbmon_status", "bg_run", "bg_status", "bg_logs", "bg_kill"]) {
+      assert.ok(addedTools.some((t) => t.name === name), `${name} registered`)
+    }
+  } finally {
+    await cleanup?.()
+  }
+})
+
+test("bundle: namespaced opencode-hbmon enabled:false — tool yok, diğerleri durur (NABIZ-008)", async () => {
+  const { sessionHooks, addedTools, cleanup } = await setupV2(bundle, { "opencode-hbmon": { enabled: false } })
+  try {
+    assert.ok(!addedTools.some((t) => t.name === "bg_run"), "bg_run kaydolmaz")
+    const e = await sessionContext(sessionHooks, [])
+    const texts = systemTexts(e.system)
+    assert.ok(texts.some((t) => t.includes("[hbmon-disabled]")), "kapalı disclosure var")
+    assert.ok(texts.some((t) => t.includes("[context-saver]")), "cs duruyor")
+    assert.ok(texts.some((t) => t.includes("[build-tracker]")), "bt duruyor")
+  } finally {
+    await cleanup?.()
+  }
+})

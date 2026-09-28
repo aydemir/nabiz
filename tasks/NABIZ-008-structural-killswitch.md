@@ -1,10 +1,10 @@
 ---
 id: NABIZ-008
 title: "hbmon plugin kill-switch'i yapısal yap (7 tool kayıt altında kalıyor)"
-status: todo
+status: done
 priority: P2
 created: 2026-09-27
-updated: 2026-09-27
+updated: 2026-09-28
 labels: [bg-hbmon, config, context-economy]
 depends_on: []
 ---

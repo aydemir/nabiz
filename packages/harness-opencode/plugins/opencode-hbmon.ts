@@ -34,6 +34,10 @@ import {
   watchBuild,
 } from "nabiz-core/hbmon-tools"
 import {
+  HBMON_DISABLED_SENTINEL,
+  HBMON_DISABLED_TEXT,
+} from "nabiz-core/hbmon-disclosure"
+import {
   bgDir,
   createOffsetTracker,
   formatCursorReceipt,
@@ -59,6 +63,14 @@ interface HbmonPluginConfig {
 }
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/
+
+function systemText(s: unknown): string {
+  if (typeof s === "string") return s
+  if (s != null && typeof s === "object" && "text" in (s as Record<string, unknown>)) {
+    return String((s as Record<string, unknown>).text ?? "")
+  }
+  return ""
+}
 
 const DEFAULT_CONFIG: HbmonPluginConfig = {
   enabled: true,
@@ -127,6 +139,17 @@ export default Plugin.define({
       ...DEFAULT_CONFIG,
       ...((ctx.options ?? {}) as HbmonPluginConfig),
     }
+    if (config.enabled === false) {
+      // NABIZ-008: yapısal kill-switch — transform hiç çağrılmaz, 7 tool
+      // kaydolmaz (build-tracker deseni). Tek görünür iz: neden-yok
+      // disclosure'ı (diğer plugin'lerin yaptığı gibi context hook'u,
+      // sentinel-idempotent, oturum açılışında bir kez).
+      await ctx.session.hook("context", (event) => {
+        if (event.system.some((s) => systemText(s).includes(HBMON_DISABLED_SENTINEL))) return
+        event.system.push({ type: "text", text: HBMON_DISABLED_TEXT })
+      })
+      return
+    }
     const bin =
       typeof config.bin === "string" && config.bin.trim() !== ""
         ? config.bin.trim()
@@ -154,7 +177,6 @@ export default Plugin.define({
           ["command"],
         ),
         async execute(input) {
-          if (config.enabled === false) return { content: "hbmon_watch kapalı (enabled:false)" }
           const args = input as { command: string[]; uuid?: string; timeout_sec?: number }
           const w = await watchBuild(bin, args.command, {
             uuid: args.uuid,
@@ -185,7 +207,6 @@ export default Plugin.define({
           ["sock"],
         ),
         async execute(input) {
-          if (config.enabled === false) return { content: "hbmon_wait kapalı (enabled:false)" }
           const args = input as { sock: string; timeout?: number; until?: string }
           const w = await waitBuild(bin, args.sock, {
             timeoutSec: args.timeout ?? defaultTimeoutSec,
@@ -202,7 +223,6 @@ export default Plugin.define({
           "Sock'lu build'in anlık özeti (ağaç+metrik+sağlık). Hızlı yoklama, beklemez. hbmon_wait `woke_on=... state=running/stalled` dönerse detaya bununla bak.",
         input: obj({ sock: str("hbmon_watch'tan dönen sock") }, ["sock"]),
         async execute(input) {
-          if (config.enabled === false) return { content: "hbmon_status kapalı (enabled:false)" }
           const args = input as { sock: string }
           const s = await statusBuild(bin, args.sock)
           if (!s.response) return { content: `hbmon_status BAŞARISIZ: ${s.error}` }
@@ -224,7 +244,6 @@ export default Plugin.define({
           ["name", "command"],
         ),
         async execute(input, context) {
-          if (config.enabled === false) return { content: "bg_run kapalı (enabled:false)" }
           const args = input as { name: string; command: string; notify?: boolean; timeout_sec?: number }
           if (!NAME_RE.test(args.name)) {
             return { content: "bg_run HATA: `name` /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/ uymalı" }
@@ -292,7 +311,6 @@ export default Plugin.define({
         description: "Arka plan görevinin anlık özeti (compact). Beklemez. id: name veya uuid-prefix.",
         input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
         async execute(input) {
-          if (config.enabled === false) return { content: "bg_status kapalı (enabled:false)" }
           const args = input as { id: string }
           const r = resolveRecord(bgDir(), args.id)
           if (!r.record) {
@@ -329,7 +347,6 @@ export default Plugin.define({
           offset: { ...num("Artımlı okuma bayt konumu (önceki yanıtın next_offset'i; yoksa tail modu)") },
         }, ["id"]),
         async execute(input) {
-          if (config.enabled === false) return { content: "bg_logs kapalı (enabled:false)" }
           const args = input as { id: string; tail_bytes?: number; offset?: number }
           const r = resolveRecord(bgDir(), args.id)
           if (!r.record) return { content: `bg_logs HATA: ${r.error}` }
@@ -350,7 +367,6 @@ export default Plugin.define({
         description: "Arka plan görevini öldür (process group, TERM). id: name veya uuid-prefix.",
         input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
         async execute(input) {
-          if (config.enabled === false) return { content: "bg_kill kapalı (enabled:false)" }
           const args = input as { id: string }
           const r = resolveRecord(bgDir(), args.id)
           if (!r.record) return { content: `bg_kill HATA: ${r.error}` }
