@@ -254,6 +254,33 @@ test("bg_run: name validasyonu (daemon yok)", async () => {
   assert.match(textOf(bad.content), /HATA.*name/)
 })
 
+test("bg-wake: üretim enjeksiyon metni wakeMessage ile birebir (NABIZ-010)", async () => {
+  const { execFile } = await import("node:child_process")
+  const dir = mkdtempSync(join(tmpdir(), "bg-"))
+  // Sahte `opencode`: enjeksiyon metnini (son arg) dosyaya yazar, 0 döner.
+  const stub = join(dir, "opencode")
+  writeFileSync(stub, '#!/bin/sh\nlast=""; for a in "$@"; do last="$a"; done\nprintf \'%s\' "$last" > "$MSG"\nexit 0\n')
+  chmodSync(stub, 0o755)
+  const runWake = (logLine, tag) => new Promise((resolve) => {
+    const log = join(dir, `${tag}.jsonl`)
+    writeFileSync(log, logLine + "\n")
+    const msgFile = join(dir, `${tag}.msg.txt`)
+    execFile(
+      process.execPath,
+      ["scripts/bg-wake.mjs", "--session", "ses_x", "--sock", join(dir, `${tag}.sock`), "--log", log, "--name", "derle"],
+      { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, MSG: msgFile } },
+      (err, stdout) => resolve({ code: err?.code ?? 0, stdout: String(stdout), msgFile }),
+    )
+  })
+  // jsonl'da terminal olay → bekçi doğrudan enjekte eder (daemon yok).
+  const r1 = await runWake(JSON.stringify({ ev: "exit", state: "done", code: 0 }), "a")
+  assert.equal(r1.code, 0)
+  assert.equal(readFileSync(r1.msgFile, "utf8"), wakeMessage("derle", "done", 0))
+  const r2 = await runWake(JSON.stringify({ ev: "exit", state: "failed" }), "b")
+  assert.equal(r2.code, 0)
+  assert.equal(readFileSync(r2.msgFile, "utf8"), wakeMessage("derle", "failed", undefined))
+})
+
 test("bg-wake: --dry-run komut üretir (daemon yok)", async () => {
   const { execFile } = await import("node:child_process")
   const out = await new Promise((resolve) => {

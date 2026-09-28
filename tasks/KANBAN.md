@@ -22,7 +22,7 @@ katmanıdır.
 | NABIZ-007 | Native background shell kör noktası (Shell finished) | done (shell.started/ended takibi) | P2 |
 | NABIZ-008 | hbmon kill-switch'i yapısal (7 tool kayıt altında) | done (erken-dönüş + `[hbmon-disabled]` disclosure, 3 test) | P2 |
 | NABIZ-009 | bg_logs tail_bytes sözleşmesi ↔ gerçek cap (512000 ↔ 51200) | done P1 (açıklama + `capped=`); P2 politika açık | P1 |
-| NABIZ-010 | Wake mesajı üçlü kopyası (core `wakeMessage` üretimde ölü) | todo | P2 |
+| NABIZ-010 | Wake mesajı üçlü kopyası (core `wakeMessage` üretimde ölü) | done (`bg-wake` import'lar, üretim-yolu testi) | P2 |
 
 Sıra: `NABIZ-001 → NABIZ-002 → NABIZ-003` (003, 001'e bağlı; 001-002 bağımsız,
 paralel yapılabilir). `NABIZ-004 ↔ NABIZ-005` bağımsız, paralel yapılabilir;

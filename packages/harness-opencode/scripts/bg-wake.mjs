@@ -33,6 +33,7 @@
  */
 import { spawn } from "node:child_process"
 import * as fs from "node:fs"
+import { wakeMessage } from "nabiz-core/bg-tasks"
 
 const args = process.argv.slice(2)
 const get = (k, d) => {
@@ -163,7 +164,7 @@ function logAttempt(rec) {
 }
 
 async function inject(state, code) {
-  const base = `[bg] ${NAME} → ${state} (exit ${code ?? "?"}). bg_status/bg_logs ile detaya bak.`
+  const base = wakeMessage(NAME, state, code ?? undefined)
   const msg = MARKER ? `${base} ${MARKER}` : base
   const injection_ts = Date.now()
   const d = await run("opencode", ["run", "-s", SESSION, msg], 180000)
@@ -315,6 +316,9 @@ async function verifyLoop(state, code) {
 
 async function main() {
   if (DRY) {
+    // Şablon: <state>/<code> yer tutucudur, enjekte edilmez. Gerçek metin
+    // inject()'teki wakeMessage'ten gelir; sözleşme cümlesi aynı kalmak
+    // zorunda (NABIZ-010 — üçlü kopya tek kaynağa indi, bu satır örnek).
     console.log(`opencode run -s ${SESSION} "[bg] ${NAME} → <state> (exit <code>). bg_status/bg_logs ile detaya bak."`)
     return 0
   }

@@ -102,8 +102,9 @@ Tek satırlık gerçek hata **açıklamanın yalan söylemesi**dir.
   default istekte `capped` yok; devam (`offset=51200`) temiz.
 - Testler: `readOutCursor` capped + `formatCursorReceipt` capped + `bg_logs`
   plugin seviyesi capped (`packages/harness-opencode/tests/bg-tasks.test.mjs`).
-  `bg-tasks.test.mjs` 12/12 daemon'suz test yeşil; 7 hata baz ile aynı
-  (önceden var: bg-wake cwd yolu + adapter mock'ları, bu işle ilgisiz).
+  Paket dizininden koşulan suite yeşil (`node --test tests/bg-tasks.test.mjs`:
+  20/20 pass; düzeltme: önceki "7 hata" gözlemi repo kökünden koşmaktan
+  kaynaklanıyordu, `scripts/bg-wake.mjs` göreli yolu paket cwd'si ister).
 - `offset` verilmeden (tail modu) davranış bit-bazında aynı (test 4+8 yeşil);
   NABIZ-001 `[tekrar]` mantığına dokunulmadı (test 6+8 yeşil).
 

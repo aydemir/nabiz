@@ -1,10 +1,10 @@
 ---
 id: NABIZ-010
 title: "Wake mesajı üç yerde kopyalanmış; core'daki wakeMessage üretimde ölü"
-status: todo
+status: done
 priority: P2
 created: 2026-09-27
-updated: 2026-09-27
+updated: 2026-09-28
 labels: [bg-hbmon, hygiene, contract]
 depends_on: []
 ---
@@ -64,7 +64,23 @@ biçimlendiricisi" sunuyor ama kimse kullanmıyor; bir sonraki okuyucu
   üretim-durumu)
 - `packages/harness-opencode/tests/bg-tasks.test.mjs`
 
-## Doğrulama
+## Doğrulama (2026-09-28 uygulandı)
+
+- Canlı: sahte `opencode` (PATH) + terminal olaylı `.jsonl` ile `bg-wake.mjs`
+  koştu → enjeksiyon metni `wakeMessage` çıktısıyla **birebir** aynı
+  (`done`/`0` ve `failed`/kodsuz iki durum).
+- Detached ESM çözümlenmesi çalışıyor: `nabiz-core/bg-tasks` import'u
+  `node packages/harness-opencode/scripts/bg-wake.mjs` altında hatasız
+  çözüldü (workspace symlink + `dist` üzerinden).
+- `rg "bg_status/bg_logs ile detaya bak"` → tek tanım
+  (`packages/core/src/bg-tasks.ts:201`) + işaretli şablon (`bg-wake.mjs:322`
+  dry-run, `<state>`/`<code>` yer tutuculu, yorumla ayrıldı).
+- Test: `bg-wake: üretim enjeksiyon metni wakeMessage ile birebir`
+  (`packages/harness-opencode/tests/bg-tasks.test.mjs`) — kopyayı değil
+  üretim yolunu kilitler. Suite: 20/20 yeşil, davranış değişmedi (saf DRY;
+  `code ?? undefined` ile eski `??` semantiği korundu).
+
+## Doğrulama (uygulama öncesi plan — üstteki gerçekleşti)
 
 - Canlı: `bg_run` ile biten bir task → uyanma metni `wakeMessage` çıktısıyla
   **birebir** aynı.

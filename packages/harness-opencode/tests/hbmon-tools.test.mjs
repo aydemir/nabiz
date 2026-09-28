@@ -189,9 +189,9 @@ test("plugin: V2 define + 7 tool + kapalı-modu", async () => {
     assert.equal(typeof tool.execute, "function", `${name} execute`)
   }
   const off = await setupV2(hbmonFactory, { enabled: false })
-  const wait = off.addedTools.find((t) => t.name === "hbmon_wait")
-  const res = await wait.execute({ sock: "x" }, {})
-  assert.ok(textOf(res.content ?? res).includes("kapalı"))
+  // NABIZ-008: yapısal kill-switch — kapalıyken 7 tool hiç kaydolmaz
+  // (eski stub "kapalı" metni kaldırıldı; "unknown tool" döner).
+  assert.deepEqual(off.addedTools, [])
 })
 
 test("plugin tool: hbmon_wait uçtan uca (shim)", async () => {
