@@ -18,7 +18,7 @@ katmanıdır.
 | NABIZ-003 | bg_logs wait_ms (hbmon wait reuse) | done (wait 17/17 canlı) | P2 |
 | NABIZ-004 | Foreground MCP çağrılarında TUI spinner'ı (sıfır kod) | done (README + motor kanıtı) | P2 |
 | NABIZ-005 | Background işler için progress watcher (event-driven) | done (events reuse + bg_status) | P3 |
-| NABIZ-006 | Windows npm workspace symlink (EPERM) | todo (not eklendi, canlı kanıt bekler) | P2 |
+| NABIZ-006 | Windows npm workspace symlink (EPERM) | done (preflight yeterli, istisna) | P2 |
 | NABIZ-007 | Native background shell kör noktası (Shell finished) | done (shell.started/ended takibi) | P2 |
 | NABIZ-008 | hbmon kill-switch'i yapısal (7 tool kayıt altında) | done (erken-dönüş + `[hbmon-disabled]` disclosure, 3 test) | P2 |
 | NABIZ-009 | bg_logs tail_bytes sözleşmesi ↔ gerçek cap (512000 ↔ 51200) | done P1 (açıklama + `capped=`); P2 politika açık | P1 |

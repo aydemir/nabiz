@@ -1,10 +1,10 @@
 ---
 id: NABIZ-006
 title: "Windows'ta npm workspace symlink (EPERM) sorunu"
-status: todo
+status: done
 priority: P2
 created: 2026-09-27
-updated: 2026-09-27
+updated: 2026-09-28
 labels: [windows, npm, workspaces, build]
 depends_on: []
 ---
@@ -39,6 +39,11 @@ Windows'ta `npm install` workspace linklerini symlink ile kurar
   - Gerçek kilitli Windows hesabında `node scripts/check-symlink.mjs`'in
     exit 1 + çözüm mesajı verdiği doğrulanmalı (CI runner'ı admin olduğu
     için bu senaryo CI'da üretilemiyor).
+
+## Kapanış (2026-09-28)
+
+done — kanıt-bar istisnası (`docs/decisions.md`). Preflight + README + CI
+yeterli. Kilitli-hesap canlı EPERM kanıtı opsiyonel (NABIZ-006b P3).
 
 ## Doğrulama
 
