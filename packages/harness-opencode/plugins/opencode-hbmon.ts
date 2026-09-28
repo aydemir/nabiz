@@ -2,7 +2,7 @@
  * opencode-hbmon — hbmon custom tool'ları (TASK-126).
  *
  * Ajan wakeup: `hbmon_watch` ile arka plana at, `hbmon_wait` ile tek
- * bloklayan çağrıda uyan (polling yok, context'e log sızmaz).
+ * bloklayan çağrıda uyan (polling yOK, context'e log sızmaz).
  * settle-noticer next-contact kalır; bu plugin turn-içi beklemeyi kapatır.
  *
  * bg_* (TASK-132): pi/nabız `bg_run` modelinin opencode karşılığı —
@@ -19,6 +19,10 @@
  * `ctx.tool.transform(editor => editor.add(...))`. Şemalar JSON Schema,
  * execute `{ content }` döndürür. Tool adları aynı tutulur (LLM + test
  * uyumluluğu); namespace yok.
+ *
+ * Faz 8: ToolContext (sessionID, agent, messageID, id, signal, progress)
+ * tüm 7 tool'a bağlandı. signal → hbmon_wait/hbmon_status iptal;
+ * progress → hbmon_wait ara-durum bildirimi. namespace "build pulse".
  */
 
 import { Plugin } from "@opencode/plugin"
@@ -51,6 +55,16 @@ interface HbmonPluginConfig {
   defaultTimeoutSec?: number
   /** bg wake bekçi scripti (boşsa repo scripts/bg-wake.mjs). */
   wakeScript?: string
+}
+
+/** V2 ToolContext — promise yüzeyi (test ile birebir aynı şekil). */
+interface ToolContext {
+  sessionID: string
+  agent: string
+  messageID: string
+  id: string
+  signal: AbortSignal
+  progress(update: Record<string, unknown>): Promise<void> | void
 }
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/
@@ -166,6 +180,7 @@ export default Plugin.define({
           },
           ["command"],
         ),
+        options: { namespace: "build pulse" },
         async execute(input) {
           const args = input as { command: string[]; uuid?: string; timeout_sec?: number }
           const w = await watchBuild(bin, args.command, {
@@ -198,12 +213,22 @@ export default Plugin.define({
           },
           ["sock"],
         ),
-        async execute(input) {
+        options: { namespace: "build pulse" },
+        async execute(input, context) {
           const args = input as { sock: string; timeout?: number; until?: string }
+          const signal = (context as ToolContext | undefined)?.signal
           const w = await waitBuild(bin, args.sock, {
             timeoutSec: args.timeout ?? defaultTimeoutSec,
             until: args.until,
+            signal,
           })
+          // Faz 8: progress bildirimi — NABIZ-005 ile aynı kaynak.
+          if (w.response !== undefined && context) {
+            const r = w.response as Record<string, unknown>
+            if (typeof r.state === "string" && r.state === "running") {
+              void context.progress({ state: "running", sock: args.sock }).catch(() => {})
+            }
+          }
           const body = w.response !== undefined ? JSON.stringify(w.response) : ""
           return { content: body === "" ? w.summary : `${w.summary}\n${body}` }
         },
@@ -214,9 +239,11 @@ export default Plugin.define({
         description:
           "Sock'lu build'in anlık özeti (ağaç+metrik+sağlık). Hızlı yoklama, beklemez. hbmon_wait `woke_on=... state=running/stalled` dönerse detaya bununla bak.",
         input: obj({ sock: str("hbmon_watch'tan dönen sock") }, ["sock"]),
-        async execute(input) {
+        options: { namespace: "build pulse" },
+        async execute(input, context) {
           const args = input as { sock: string }
-          const s = await statusBuild(bin, args.sock)
+          const signal = (context as ToolContext | undefined)?.signal
+          const s = await statusBuild(bin, args.sock, process.env, 10000, false, signal)
           if (!s.response) return { content: `hbmon_status BAŞARISIZ: ${s.error}` }
           return { content: JSON.stringify(s.response) }
         },
@@ -235,6 +262,7 @@ export default Plugin.define({
           },
           ["name", "command"],
         ),
+        options: { namespace: "build pulse" },
         async execute(input, context) {
           const args = input as { name: string; command: string; notify?: boolean; timeout_sec?: number }
           if (!NAME_RE.test(args.name)) {
@@ -248,9 +276,7 @@ export default Plugin.define({
           if (!w.handshake) return { content: `bg_run BAŞARISIZ: ${w.error}` }
           const h = w.handshake
           const dir = bgDir()
-          // V1'de tool execute ikinci argümanı `{ sessionID }` taşıyordu;
-          // V2 ToolContext'te sessionID yine var.
-          const sessionID = (context as unknown as { sessionID?: string } | undefined)?.sessionID ?? ""
+          const sessionID = (context as ToolContext | undefined)?.sessionID ?? ""
           const out = h.log.endsWith(".jsonl") ? h.log.slice(0, -6) + ".out" : outFromSock(h.sock)
           writeRecord(dir, {
             v: 1,
@@ -268,13 +294,8 @@ export default Plugin.define({
             `İzle: bg_status/bg_logs/bg_kill (id veya name ile).`,
           ]
           if (notify && sessionID !== "") {
-            // wakeScript: config mutlak yolu > paket-içi arama (kaynak/dist
-            // yerleşimden bağımsız). Bulunamazsa legacy göreli yol denenir;
-            // spawn başarısızlığı yakalanır, yoklama yoluna düşülür.
             const wake = resolveWakeScript(config.wakeScript, import.meta.url)
             try {
-              // Bekçi çıktısı dosyaya (kör nokta yok); process detached+unref.
-              // Runtime: resolveWakeNodeBin (V2'de execPath opencode'dur).
               const wakeLog = join(dir, `bg-${h.uuid}.wake.log`)
               const outFd = openSync(wakeLog, "a")
               const child = spawn(
@@ -302,19 +323,18 @@ export default Plugin.define({
         name: "bg_status",
         description: "Arka plan görevinin anlık özeti (compact). Beklemez. id: name veya uuid-prefix.",
         input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
-        async execute(input) {
+        options: { namespace: "build pulse" },
+        async execute(input, context) {
           const args = input as { id: string }
           const r = resolveRecord(bgDir(), args.id)
           if (!r.record) {
-            // NABIZ-005: bg kaydı yoksa build-mon izlemesine düş (name ile).
-            // events.jsonl yoksa/eşleşme yoksa sessizce HATA (fail-open).
             const prog = readLastProgress(resolveEventDirs(undefined, process.env, process.cwd()), args.id)
             if (prog) return { content: `name=${args.id} ${formatProgress(prog)} (build-mon izlemesi)` }
             return { content: `bg_status HATA: ${r.error}` }
           }
-          const s = await statusBuild(bin, r.record.sock, process.env, 10000, true)
+          const signal = (context as ToolContext | undefined)?.signal
+          const s = await statusBuild(bin, r.record.sock, process.env, 10000, true, signal)
           if (!s.response) {
-            // Monitör kapanmış olabilir — .jsonl son olay fallback'i.
             const ev = readLastEvent(r.record.log)
             if (ev && isTerminalState(ev.state)) {
               const dur = typeof ev.duration_sec === "number" ? ` in ${ev.duration_sec.toFixed(1)}s` : ""
@@ -344,6 +364,7 @@ export default Plugin.define({
           },
           ["id"],
         ),
+        options: { namespace: "build pulse" },
         async execute(input) {
           const args = input as { id: string; tail_bytes?: number; offset?: number }
           const r = resolveRecord(bgDir(), args.id)
@@ -364,6 +385,7 @@ export default Plugin.define({
         name: "bg_kill",
         description: "Arka plan görevini öldür (process group, TERM). id: name veya uuid-prefix.",
         input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
+        options: { namespace: "build pulse" },
         async execute(input) {
           const args = input as { id: string }
           const r = resolveRecord(bgDir(), args.id)

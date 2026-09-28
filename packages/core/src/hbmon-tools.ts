@@ -150,7 +150,7 @@ export interface WaitResult {
 export async function waitBuild(
   bin: string,
   sock: string,
-  opts: { timeoutSec?: number; until?: string; env?: NodeJS.ProcessEnv; startupGraceMs?: number } = {},
+  opts: { timeoutSec?: number; until?: string; env?: NodeJS.ProcessEnv; startupGraceMs?: number; signal?: AbortSignal } = {},
 ): Promise<WaitResult> {
   const daemonTimeout = opts.timeoutSec ?? 50
   const args = ["wait", "--sock", sock, "--timeout", String(daemonTimeout)]
@@ -159,9 +159,11 @@ export async function waitBuild(
   const deadline = Date.now() + (opts.startupGraceMs ?? 10000)
   let raw = await runHbmon(bin, args, execMs, opts.env)
   while (!raw.json && isConnectionError(raw) && Date.now() < deadline) {
+    if (opts.signal?.aborted) return { summary: "hbmon_wait iptal edildi (signal)" }
     await sleep(250)
     raw = await runHbmon(bin, args, execMs, opts.env)
   }
+  if (opts.signal?.aborted) return { summary: "hbmon_wait iptal edildi (signal)" }
   if (raw.error) return { summary: raw.error, error: raw.error }
   const r = raw.json as Record<string, unknown> | undefined
   if (!r || typeof r !== "object") {
@@ -217,15 +219,18 @@ export async function statusBuild(
   env: NodeJS.ProcessEnv = process.env,
   startupGraceMs = 10000,
   compact = false,
+  signal?: AbortSignal,
 ): Promise<{ response?: unknown; error?: string }> {
   const statusArgs = ["status", "--sock", sock]
   if (compact) statusArgs.push("--compact")
   let raw = await runHbmon(bin, statusArgs, 30000, env)
   const deadline = Date.now() + startupGraceMs
   while (!raw.json && isConnectionError(raw) && Date.now() < deadline) {
+    if (signal?.aborted) return { error: "hbmon_status iptal edildi (signal)" }
     await sleep(250)
     raw = await runHbmon(bin, statusArgs, 30000, env)
   }
+  if (signal?.aborted) return { error: "hbmon_status iptal edildi (signal)" }
   if (raw.error) return { error: raw.error }
   if (!raw.json || typeof raw.json !== "object") {
     return { error: `hbmon status parse edilemedi (exit ${raw.code})` }
