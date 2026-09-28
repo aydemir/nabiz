@@ -114,6 +114,8 @@ export interface OutCursor {
   nextOffset: number
   size: number
   truncated: boolean
+  /** NABIZ-009 P1: istek cap'i aştıysa etkin tavan (bayt). Yoksa undefined. */
+  capped?: number
 }
 
 export const OUT_CURSOR_CAP = 50 * 1024
@@ -123,25 +125,28 @@ export const OUT_CURSOR_CAP = 50 * 1024
  * - Negatif/NaN offset → 0'a clamp; len üst sınırı OUT_CURSOR_CAP.
  * - `offset > size` → `{ text: "", nextOffset: size }` (cursor EOF'a sabitlenir).
  * - UTF-8 bayt kesimi olduğu gibi bırakılır (tail ile aynı trade-off).
+ * - NABIZ-009 P1: `maxBytes > OUT_CURSOR_CAP` ise okuma cap'e kırpılır ve
+ *   sonuçta `capped` (etkin tavan) döner; politika değişmez, yalnız dürüstlük.
  */
 export function readOutCursor(outPath: string, offset: number, maxBytes = OUT_CURSOR_CAP): OutCursor {
   let off = Number.isFinite(offset) ? Math.floor(offset) : 0
   if (off < 0) off = 0
   const len = Math.max(1, Math.min(Math.floor(maxBytes), OUT_CURSOR_CAP))
+  const capped = Number.isFinite(maxBytes) && Math.floor(maxBytes) > OUT_CURSOR_CAP ? OUT_CURSOR_CAP : undefined
   let st: fs.Stats
   try {
     st = fs.statSync(outPath)
   } catch {
-    return { text: `(çıktı yok: ${outPath})`, nextOffset: 0, size: 0, truncated: false }
+    return { text: `(çıktı yok: ${outPath})`, nextOffset: 0, size: 0, truncated: false, ...(capped !== undefined ? { capped } : {}) }
   }
-  if (off > st.size) return { text: "", nextOffset: st.size, size: st.size, truncated: false }
+  if (off > st.size) return { text: "", nextOffset: st.size, size: st.size, truncated: false, ...(capped !== undefined ? { capped } : {}) }
   const fd = fs.openSync(outPath, "r")
   try {
     const n = Math.min(len, st.size - off)
     const buf = Buffer.alloc(n)
     fs.readSync(fd, buf, 0, n, off)
     const nextOffset = off + n
-    return { text: buf.toString("utf8"), nextOffset, size: st.size, truncated: nextOffset < st.size }
+    return { text: buf.toString("utf8"), nextOffset, size: st.size, truncated: nextOffset < st.size, ...(capped !== undefined ? { capped } : {}) }
   } finally {
     fs.closeSync(fd)
   }
@@ -154,10 +159,10 @@ export function readOutCursor(outPath: string, offset: number, maxBytes = OUT_CU
 export function formatCursorReceipt(
   name: string,
   offset: number,
-  cur: Pick<OutCursor, "nextOffset" | "size" | "truncated">,
+  cur: Pick<OutCursor, "nextOffset" | "size" | "truncated" | "capped">,
   text: string,
 ): string {
-  const head = `[${name} .out offset=${offset} next_offset=${cur.nextOffset} size=${cur.size}${cur.truncated ? " TRUNCATED, devamı var" : ""}]`
+  const head = `[${name} .out offset=${offset} next_offset=${cur.nextOffset} size=${cur.size}${cur.truncated ? " TRUNCATED, devamı var" : ""}${cur.capped !== undefined ? ` capped="${cur.capped}"` : ""}]`
   if (text === "") return `${head}\n(yeni çıktı yok)`
   const hint = cur.truncated ? `(devamı için offset=${cur.nextOffset} ile tekrar çağır)\n` : ""
   return `${head}\n${hint}${text}`

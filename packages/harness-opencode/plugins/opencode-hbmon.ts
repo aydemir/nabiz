@@ -322,10 +322,10 @@ export default Plugin.define({
       editor.add({
         name: "bg_logs",
         description:
-          "Arka plan görevinin stdout kuyruğu (.out tail, max 50KB). id: name veya uuid-prefix. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür.",
+          "Arka plan görevinin stdout kuyruğu (.out tail, tail modunda max 512KB). id: name veya uuid-prefix. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür. Cursor (offsetli) modda tavan 50KB — üstü kırpılır, receipt'te capped ile bildirilir.",
         input: obj({
           id: str("Görev name veya uuid-prefix (bg_run'dan döner)"),
-          tail_bytes: { ...num("Kuyruk baytı (default 51200, max 512000)") },
+          tail_bytes: { ...num("Kuyruk baytı (default 51200; tail modunda max 512000, cursor modunda max 51200 — üstü capped ile kırpılır)") },
           offset: { ...num("Artımlı okuma bayt konumu (önceki yanıtın next_offset'i; yoksa tail modu)") },
         }, ["id"]),
         async execute(input) {

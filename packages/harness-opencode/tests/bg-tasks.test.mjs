@@ -13,6 +13,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
+  OUT_CURSOR_CAP,
   bgDir,
   createOffsetTracker,
   formatCursorReceipt,
@@ -114,6 +115,12 @@ test("readOutCursor: dilim + nextOffset + truncated + size (NABIZ-001)", () => {
   assert.equal(c.text.length, 50 * 1024)
   assert.equal(c.nextOffset, 50 * 1024)
   assert.equal(c.truncated, true)
+  // NABIZ-009 P1: cap aşımı dürüstçe bildirilir
+  assert.equal(c.capped, 50 * 1024)
+  assert.equal(readOutCursor(big, 0, 1024).capped, undefined)
+  assert.equal(readOutCursor(big, 0).capped, undefined) // default = cap, kırpma yok
+  assert.equal(readOutCursor(big, 0, 999999).capped, 50 * 1024) // panik yok
+  assert.equal(readOutCursor(p, 0, 6).capped, undefined)
 })
 
 test("createOffsetTracker: istenen offset, tekrarı yakalar (NABIZ-001 §4)", () => {
@@ -137,6 +144,11 @@ test("formatCursorReceipt: makbuz + ipucu + boş-EOF (NABIZ-001)", () => {
   assert.ok(!done.includes("TRUNCATED"))
   const empty = formatCursorReceipt("derle", 16, { nextOffset: 16, size: 16, truncated: false }, "")
   assert.match(empty, /\(yeni çıktı yok\)/)
+  // NABIZ-009 P1: capped receipt'te görünür, yoksa görünmez
+  const capped = formatCursorReceipt("derle", 0, { nextOffset: 51200, size: 300000, truncated: true, capped: OUT_CURSOR_CAP }, "x".repeat(10))
+  assert.match(capped, /capped="51200"/)
+  assert.ok(!r.includes("capped"))
+  assert.ok(!done.includes("capped"))
 })
 
 test("bg_logs cursor: makbuz + tekrar uyarısı + tail regresyonu (daemon yok)", async () => {
@@ -161,6 +173,11 @@ test("bg_logs cursor: makbuz + tekrar uyarısı + tail regresyonu (daemon yok)",
     const tail = String(await runLogs({ id: "cursor" }))
     assert.match(tail, /\[cursor \.out/)
     assert.match(tail, /satir3/)
+    // NABIZ-009 P1: cursor'da cap aşımı receipt'te capped ile görünür
+    const big = String(await runLogs({ id: "cursor", offset: 0, tail_bytes: 262144 }))
+    assert.match(big, /capped="51200"/)
+    assert.ok(!first.includes("capped")) // küçük istekte capped yok
+    assert.ok(!cont.includes("capped")) // default istekte capped yok
   } finally {
     if (prev === undefined) delete process.env.HBMON_BG_DIR
     else process.env.HBMON_BG_DIR = prev
