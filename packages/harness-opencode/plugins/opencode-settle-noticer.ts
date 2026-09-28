@@ -29,6 +29,7 @@
 
 import { dirname } from "node:path"
 import { Plugin } from "@opencode/plugin"
+import { bgDir, listRecords } from "nabiz-core/bg-tasks"
 import {
   buildNotice,
   buildPendingSuffix,
@@ -65,6 +66,16 @@ const DEFAULT_CONFIG = {
   maxFiles: DEFAULT_MAX_FILES,
   skipWhenContains: DEFAULT_SKIP_CONTAINS,
   staleAfterMs: DEFAULT_STALE_AFTER_MS,
+}
+
+/**
+ * Tek wakeup yolu (Faz 9): build adına `notify:true` bg kaydı varsa
+ * bg-wake watcher'ı bildirimi üretir — [sn] notu çift bildirim yapar,
+ * bu yüzden o ad settle'den atlanır. bg kaydı yoksa/sessizse false
+ * (setle-noticer kendi bildirimini yapar).
+ */
+function bgOwnsWakeup(name: string, env: NodeJS.ProcessEnv): boolean {
+  return listRecords(bgDir(env)).some((r) => r.name === name && r.notify)
 }
 
 function systemText(s: unknown): string {
@@ -141,7 +152,11 @@ export default Plugin.define({
       const dirs = resolveEventDirs(config.eventDirs, process.env, cwd)
       if (dirs.length === 0) return
 
-      const settled = scanSettled(dirs, config.maxFiles)
+      const settledAll = scanSettled(dirs, config.maxFiles)
+      // Tek wakeup yolu (Faz 9): bg-wake watcher'ı (`notify:true` bg kaydı)
+      // olan build adları bg-wake'e ait — [sn] notu üretmez, çift bildirim
+      // olmaz.
+      const settled = settledAll.filter((r) => !bgOwnsWakeup(r.name, process.env))
       // Bayatlık (TASK-131): finalsız + yaşlı heartbeat → monitör-ölümü
       // şüphesi. Settle yolundan bağımsız dal; ikisi de boşsa dokunma.
       const stale = scanStale(dirs, staleAfterMs, config.maxFiles)
