@@ -2,7 +2,7 @@
  * opencode-hbmon — hbmon custom tool'ları (TASK-126).
  *
  * Ajan wakeup: `hbmon_watch` ile arka plana at, `hbmon_wait` ile tek
- * bloklayan çağrıda uyan (polling yOK, context'e log sızmaz).
+ * bloklayan çağrıda uyan (polling yok, context'e log sızmaz).
  * settle-noticer next-contact kalır; bu plugin turn-içi beklemeyi kapatır.
  *
  * bg_* (TASK-132): pi/nabız `bg_run` modelinin opencode karşılığı —
@@ -18,7 +18,7 @@
  * V2 notu: V1 `tool()` helper + dönen `tool` map'i → V2
  * `ctx.tool.transform(editor => editor.add(...))`. Şemalar JSON Schema,
  * execute `{ content }` döndürür. Tool adları aynı tutulur (LLM + test
- * uyumluluğu); namespace yok.
+ * uyumluluğu); namespace "build pulse" (Faz 8).
  *
  * Faz 8: ToolContext (sessionID, agent, messageID, id, signal, progress)
  * tüm 7 tool'a bağlandı. signal → hbmon_wait/hbmon_status iptal;

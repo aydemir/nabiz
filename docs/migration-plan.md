@@ -4,6 +4,9 @@
 > (`docs/decisions.md` taşındı, README yönlendirmesi push'landı, repo arşivi bekliyor).
 > Statü (2026-09-25): Faz 5 ✓ — opencode 2.x API + `nabiz` markası (aşağıya bak).
 > Statü (2026-09-27): Faz 6 ✓ — NABIZ-004/005/006 + CI (ubuntu + windows).
+> Statü (2026-09-28): Faz 7 ✓ — V2 tool-katmanı red + NABIZ-006 istisnalı kapanış;
+> Faz 8 ✓ — ToolContext signal/progress + namespace `build pulse`;
+> Faz 9 ✓ — tek wakeup yolu (settle-noticer bg-wake dedup).
 
 Karar: `docs/decisions.md` (2026-09-24 04:37) — tek repo `aydemir/nabiz`,
 harness başına ayrı paket + paylaşılan core; hbmon daemon ayrı repoda kalır.
@@ -18,7 +21,7 @@ nabiz/
          disclosure,hbmon-tools,progress,prune,raw-refill,settle-notice,
          truncation-notice}.ts
   packages/harness-opencode/   # opencode adaptörü (6 plugin + server.ts barrel)
-    src/*.ts + mcp-bash-tools/ + scripts/ + tests/
+    plugins/*.ts + plugin/ (tek entrypoint, id `nabiz`) + plugins/mcp-bash-tools/ + scripts/ + tests/
   extensions/                  # pi adaptörü (mevcut; Faz 3'te core'a bağlanır)
   docs/{port-notes,migration-plan,decisions}.md
 ```
@@ -39,14 +42,18 @@ Kök `package.json` pi paketidir (`pi.extensions: ["./extensions"]` korunur);
 ## Faz 2 — harness-opencode (bitti ✓)
 
 1. `opencode-plugins/plugins/{6 plugin + server.ts}` →
-   `packages/harness-opencode/src/`; `./lib/*.js` importları `nabiz-core`'a çevrilir.
-2. `plugins/mcp-bash-tools/` → `packages/harness-opencode/mcp-bash-tools/`
+   `packages/harness-opencode/plugins/`; `./lib/*.js` importları `nabiz-core`'a çevrilir.
+   Canlı entrypoint `plugin/` bundle paketidir (tek `nabiz` id'si, Faz 5);
+   `plugins/server.ts` yalnızca re-export barrel'dır (runtime'da yüklenmez).
+2. `plugins/mcp-bash-tools/` → `packages/harness-opencode/plugins/mcp-bash-tools/`
    (nested workspace korunur).
 3. `scripts/` + `tests/` taşınır; testler `../dist` yerine yeni dist'e bakar.
 4. `scripts/setup.mjs` yol güncellemesi (repo kökü → `packages/harness-opencode`).
 5. `npm run build` temiz + suite yeşil (setup 14/14, hbmon 11+1skip,
    bg hızlı 8/8, mcp-shell 2/2) + `setup --check` temiz.
-6. opencode getLegacyPlugins kuralı korunur (barrel sadece function export).
+6. (SUPERSEDED Faz 5: V2'de her plugin dosyası kendi başına yüklenir,
+   `plugins/server.ts` yalnızca re-export barrel'dır — V1 `getLegacyPlugins`
+   kuralı geçersiz.)
 
 ## Faz 3 — pi core'a bağlanır (bitti ✓ 2026-09-24)
 
@@ -87,14 +94,40 @@ Doğrulama: `tsc --noEmit` temiz + mock-pi canlı smoke 13/13.
 2. NABIZ-005: progress watcher — `events.jsonl` reuse, tüketici `bg_status`
    zenginleştirmesi; motor `nabiz-core/progress` (timer yok, fail-open).
 3. NABIZ-006: Windows symlink — `scripts/check-symlink.mjs` preflight +
-   README notları (CI kanıtı var, kilitli-hesap kanıtı todo).
+   README notları (CI kanıtı var; kilitli-hesap kanıtı istisnayla kapatıldı —
+   bkz. `docs/decisions.md` 2026-09-28, board done).
 4. CI (`.github/workflows/ci.yml`): `build-linux` (`npm ci` + tam suite) +
    `build-windows` (`npm install` + hedefli testler); Node 22, actions v5.
+
+## Faz 7 — V2 tool katmanı red + NABIZ-006 kapanış (bitti ✓ 2026-09-28)
+
+1. Dış analiz önerisi (tool'ların core-internal `Tool.make`/`Effect` ile
+   yeniden yazımı) REDDEDİLDİ — gerekçe `docs/decisions.md` 2026-09-28
+   (yanlış katman; plugin yüzeyi promise API'dir). Kilit:
+   `packages/harness-opencode/tests/tool-context.test.mjs`.
+2. NABIZ-006 done (preflight yeterli, kanıt-bar istisnası) —
+   `docs/decisions.md` 2026-09-28; `tasks/KANBAN.md` done.
+
+## Faz 8 — ToolContext signal/progress + namespace (bitti ✓ 2026-09-28)
+
+1. `waitBuild`/`statusBuild` (`nabiz-core/hbmon-tools`) `signal?: AbortSignal`
+   alır; abort'ta iptal özeti döner (throw yok).
+2. `hbmon_wait` ara-durumda `context.progress()` çağırır (NABIZ-005 kaynağıyla aynı).
+3. 7 tool'da `options: { namespace: "build pulse" }`; ToolContext şekli
+   (`sessionID`/`agent`/`messageID`/`id`/`signal`/`progress`) testle kilitli.
+
+## Faz 9 — tek wakeup yolu (bitti ✓ 2026-09-28)
+
+`opencode-settle-noticer`, adı `notify:true` bg kaydıyla eşleşen build'leri
+`[sn]` notundan atlar (`nabiz-core/bg-tasks` `bgDir`/`listRecords` üzerinden) —
+çift bildirim önlenir, tek wakeup kaynağı `bg-wake` bekçisi olur.
 
 ## Kurallar
 
 - Geriye uyumluluk: plugin public API + disclosure metinleri değişmez.
   (SUPERSEDED Faz 5: opencode 2.x V1 API'yi çalıştırmıyor — API + metinler
   V2'ye taşındı; `bash_*` adları alias olarak korunur.)
+  (Faz 8–9 notu: namespace + signal/progress eklemelidir; settle dedup
+  davranış değişikliğidir, testle kilitlenir.)
 - Test ile bitir: her faz `tsc` + ilgili suite yeşil olmadan kapanmaz.
 - Yarım iş yok: faz bitmeden sonraki faza geçilmez.

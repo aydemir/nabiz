@@ -43,6 +43,24 @@ alt-çantası üstüne yazar. `enabled: false` (kök) tüm paketi kapatır
 (tek kill-switch). Resmi şemada `pluginOptions` anahtarı YOKTUR (V1
 artığı) — seçenekler buradan verilir.
 
+## ToolContext / namespace (Faz 8)
+
+Yedi tool da promise yüzeyinde `ToolContext`
+(`sessionID`/`agent`/`messageID`/`id`/`signal`/`progress`) alır
+(kilit: `tests/tool-context.test.mjs`):
+`signal` → `hbmon_wait`/`hbmon_status` iptali (throw yok, iptal özeti döner);
+`progress` → `hbmon_wait` ara-durum bildirimi (NABIZ-005 kaynağıyla aynı).
+Hepsinde `options: { namespace: "build pulse" }`.
+
+## Tek wakeup yolu (Faz 9)
+
+`notify:true` ile kaydedilmiş bir bg görevine ait build adı settle edince
+`[sn]` notu üretilmez ve oturum-açılış disclosure'ındaki `Pending settles`
+listesine de girmez — bildirim `bg-wake` bekçisinden gelir (tek kaynak,
+çift bildirim yok). Eşleşme `nabiz-core/bg-tasks` (`bgDir`/`listRecords`)
+üzerinden yapılır; bg kaydı yoksa/sessizse settle-noticer kendi bildirimini
+yapar.
+
 ## Foreground / spinner (NABIZ-004)
 
 Opencode TUI `running` durumundaki her tool çağrısına otomatik

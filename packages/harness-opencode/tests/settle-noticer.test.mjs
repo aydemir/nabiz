@@ -50,6 +50,24 @@ function writeStatus(dir, name, rec) {
   return p
 }
 
+function writeBgRecord(dir, { name, uuid, notify }) {
+  writeFileSync(
+    join(dir, `bg-${uuid}.json`),
+    JSON.stringify({
+      v: 1,
+      name,
+      uuid,
+      sock: "sock-test",
+      log: "/tmp/x.log",
+      out: "/tmp/x.out",
+      sessionID: "s",
+      notify,
+      createdAt: "2026-09-07T21:00:00Z",
+    }),
+    "utf8",
+  )
+}
+
 const PASSED = {
   ts: "2026-09-07T21:12:39Z",
   name: "j1-kanitli",
@@ -272,6 +290,45 @@ test("transform: bekleyen yoksa statik metin (ek yok)", async () => {
     assert.ok(!systemTexts(e.system)[0].includes("Pending settles:"))
   } finally {
     rmSync(d, { recursive: true, force: true })
+  }
+})
+
+test("hook: bg-owned settle → [sn] notu yok (Faz 9 tek wakeup)", async () => {
+  const d = mktmp()
+  const bgd = mktmp()
+  const prev = process.env.HBMON_BG_DIR
+  process.env.HBMON_BG_DIR = bgd
+  try {
+    writeStatus(d, "k", { ...PASSED, name: "k", ts: "2026-09-07T22:00:00Z" })
+    writeBgRecord(bgd, { name: "k", uuid: "uuid-faz9-hook", notify: true })
+    const { toolHooks } = await setupV2(settleFactory, { eventDirs: [d] })
+    const out = await toolAfter(toolHooks, { input: {}, output: "derleme çıktısı" })
+    assert.equal(out, "derleme çıktısı")
+  } finally {
+    if (prev === undefined) delete process.env.HBMON_BG_DIR
+    else process.env.HBMON_BG_DIR = prev
+    rmSync(d, { recursive: true, force: true })
+    rmSync(bgd, { recursive: true, force: true })
+  }
+})
+
+test("transform: bg-owned pending settle disclosure'a gömülmez (Faz 9 hayalet)", async () => {
+  const d = mktmp()
+  const bgd = mktmp()
+  const prev = process.env.HBMON_BG_DIR
+  process.env.HBMON_BG_DIR = bgd
+  try {
+    writeStatus(d, "k", { ...PASSED, name: "k", ts: "2026-09-07T22:00:00Z" })
+    writeBgRecord(bgd, { name: "k", uuid: "uuid-faz9-disc", notify: true })
+    const { sessionHooks } = await setupV2(settleFactory, { eventDirs: [d] })
+    const e = await sessionContext(sessionHooks, [])
+    assert.equal(e.system.length, 1)
+    assert.ok(!systemTexts(e.system)[0].includes("Pending settles:"))
+  } finally {
+    if (prev === undefined) delete process.env.HBMON_BG_DIR
+    else process.env.HBMON_BG_DIR = prev
+    rmSync(d, { recursive: true, force: true })
+    rmSync(bgd, { recursive: true, force: true })
   }
 })
 

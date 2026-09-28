@@ -19,9 +19,9 @@ While the agent works on stage, heavy jobs run backstage — and report back whe
 - `assets/nabiz-mark.svg` — project mark.
 - `docs/port-notes.md` — internal technical notes (opencode → pi port + Faz 3).
 - `docs/migration-plan.md` — opencode-plugins → monorepo migration plan (Faz 1–3
-  + 5–6 done, Faz 4 partial — see `docs/decisions.md`).
+  + 5–9 done, Faz 4 partial — see `docs/decisions.md`).
 - `docs/decisions.md` — decision log (moved from opencode-plugins in Faz 4).
-- `tasks/` — extension-layer task board (NABIZ-001…005 done, NABIZ-006 todo).
+- `tasks/` — extension-layer task board (NABIZ-001…010 done).
 - `scripts/check-symlink.mjs` — Windows symlink preflight (run before install).
 - `.github/workflows/ci.yml` — ubuntu + windows build/test (NABIZ-006).
 - `packages/core/` — shared host-independent engine (`nabiz-core`: hbmon

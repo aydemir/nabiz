@@ -18,7 +18,7 @@ npm run build --workspace nabiz-core   # tsc → dist/
 | Subpath | Contents |
 |---|---|
 | `nabiz-core/hbmon-tools` | `runHbmon`, `watchBuild`, `waitBuild`, `statusBuild`, `summarizeWait`, `resolveHbmonBin` |
-| `nabiz-core/bg-tasks` | sidecar records, `readOutTail`/`readOutCursor`, `formatCursorReceipt`, `createOffsetTracker`, `readLastEvent`, `isTerminalState` |
+| `nabiz-core/bg-tasks` | sidecar registry (`bgDir`, `writeRecord`/`readRecord`, `listRecords`, `resolveRecord`), `readOutTail`/`readOutCursor` (`OUT_CURSOR_CAP` 50KB, `capped=`), `formatCursorReceipt`, `createOffsetTracker`, `wakeMessage`, `readLastEvent`, `isTerminalState` |
 | `nabiz-core/prune` | output pruning for model safety |
 | `nabiz-core/disclosure` | shared disclosure texts |
 | `nabiz-core/*-disclosure` | per-plugin disclosure texts |

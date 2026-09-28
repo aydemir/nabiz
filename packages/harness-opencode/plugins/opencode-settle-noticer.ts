@@ -135,7 +135,12 @@ export default Plugin.define({
       // Dinamik ek: oturum açılışında bekleyen settlelari disclosure'a göm
       // (snapshot, salt okunur — tool-output sunum katmanını baypas eder;
       // bildirim + işaretleme after-hook'un işi, bkz TASK-123 deneyi).
-      const pending = scanSettled(resolveEventDirs(config.eventDirs, process.env, cwd), config.maxFiles)
+      // Faz 9: after-hook ile aynı filtre — bg-wake'in sahiplendiği adlar
+      // burada da görünmez, yoksa hiç silinmeyen "Pending settles" hayaleti
+      // her oturum açılışında context'e gömülür (işaretleme after-hook'ta
+      // filtrelenir, bu kayıtlar asla notified olmaz).
+      const pendingAll = scanSettled(resolveEventDirs(config.eventDirs, process.env, cwd), config.maxFiles)
+      const pending = pendingAll.filter((r) => !bgOwnsWakeup(r.name, process.env))
       event.system.push({ type: "text", text: DISCLOSURE_TEXT + buildPendingSuffix(pending) })
     })
 

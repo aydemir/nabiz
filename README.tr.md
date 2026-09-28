@@ -19,9 +19,9 @@ Agent sahnede çalışırken ağır işler arkada yürür, bitince haber gelir.
 - `assets/nabiz-mark.svg` — proje simgesi.
 - `docs/port-notes.md` — iç teknik notlar (opencode → pi portu + Faz 3).
 - `docs/migration-plan.md` — opencode-plugins → monorepo göç planı (Faz 1–3
-  + 5–6 bitti, Faz 4 kısmi — bkz. `docs/decisions.md`).
+  + 5–9 bitti, Faz 4 kısmi — bkz. `docs/decisions.md`).
 - `docs/decisions.md` — karar kaydı (Faz 4'te opencode-plugins'tan taşındı).
-- `tasks/` — extension katmanı iş tahtası (NABIZ-001…005 bitti, NABIZ-006 todo).
+- `tasks/` — extension katmanı iş tahtası (NABIZ-001…010 bitti).
 - `scripts/check-symlink.mjs` — Windows symlink ön-kontrolü (kurulumdan önce).
 - `.github/workflows/ci.yml` — ubuntu + windows derleme/test (NABIZ-006).
 - `packages/core/` — paylaşılan host-bağımsız motor (`nabiz-core`: hbmon
