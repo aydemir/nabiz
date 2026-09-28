@@ -47,13 +47,10 @@ export interface PruneMarkerStats {
 
 export function formatPruneMarker(stats: PruneMarkerStats): string {
   const { originalChars, keptChars, escapeHint } = stats
-  const saved = originalChars === 0
-    ? 0
-    : Math.round(((originalChars - keptChars) / originalChars) * 1000) / 10
+  const saved = originalChars === 0 ? 0 : Math.round(((originalChars - keptChars) / originalChars) * 1000) / 10
   const hint = escapeHint ?? "no_prune=true (this call) or enabled:false (off)"
   return (
-    `\n\n[... pruned: ${originalChars}→${keptChars} chars ` +
-    `(${saved}% saved). For raw output: ${hint}. ...]\n\n`
+    `\n\n[... pruned: ${originalChars}→${keptChars} chars ` + `(${saved}% saved). For raw output: ${hint}. ...]\n\n`
   )
 }
 
@@ -90,10 +87,7 @@ export function formatShortPruneMarker(
     "alwaysRawCommands (config whitelist)",
     "enabled:false (off)",
   ]
-  return (
-    `\n\n[... pruned: ${originalChars}→${keptChars} chars. ` +
-    `Raw ways: ${ways.join(" | ")} ...]\n\n`
-  )
+  return `\n\n[... pruned: ${originalChars}→${keptChars} chars. ` + `Raw ways: ${ways.join(" | ")} ...]\n\n`
 }
 
 /**
@@ -131,7 +125,6 @@ export interface PruneMiddleOptions {
    */
   skipWhenContains?: string
 }
-
 
 /**
  * Tool args içinde per-call bypass sinyali var mı?
@@ -209,10 +202,7 @@ function collectStrings(value: unknown, depth = 0, seen = new Set<unknown>()): s
  * ikinci pass için zorunlu). Config bütçe aşılırsa throw eder — sessiz
  * büyüme yerine construct-time'da patlar.
  */
-export function pruneMiddle(
-  text: string,
-  options: PruneMiddleOptions = {},
-): string {
+export function pruneMiddle(text: string, options: PruneMiddleOptions = {}): string {
   // Kullanıcı veya plugin options pruneları kapatmışsa dokunma.
   if (options.enabled === false) return text
   // Inline escape marker — kullanıcı tool çağrısının içine yazdı.
@@ -238,15 +228,10 @@ export function pruneMiddle(
   const budget = head + tail + markerLen
 
   if (head < 0 || tail < 0 || markerLen < 0) {
-    throw new Error(
-      `pruneMiddle: invalid budget (head=${head}, tail=${tail}, marker=${markerLen})`,
-    )
+    throw new Error(`pruneMiddle: invalid budget (head=${head}, tail=${tail}, marker=${markerLen})`)
   }
 
-  const result =
-    points.slice(0, head).join("") +
-    marker +
-    points.slice(originalChars - tail).join("")
+  const result = points.slice(0, head).join("") + marker + points.slice(originalChars - tail).join("")
   const resultLen = codePointLength(result)
 
   if (resultLen >= points.length || resultLen > budget) {
@@ -345,24 +330,53 @@ function splitShellSegments(command: string): string[] {
  * chained form için (`cd web && npm run build`) kritik — segment bazlı çalışır.
  */
 const BUILD_TOKENS = new Set<string>([
-  "build", "compile", "cargo", "npm", "pnpm", "yarn",
-  "bun", "make", "cmake", "gradle", "mvn", "go", "tsc",
-  "vite", "webpack", "esbuild", "rollup", "tailwind", "maven",
-  "docker", "pip", "pip3", "forge", "rgsx", "rain",
+  "build",
+  "compile",
+  "cargo",
+  "npm",
+  "pnpm",
+  "yarn",
+  "bun",
+  "make",
+  "cmake",
+  "gradle",
+  "mvn",
+  "go",
+  "tsc",
+  "vite",
+  "webpack",
+  "esbuild",
+  "rollup",
+  "tailwind",
+  "maven",
+  "docker",
+  "pip",
+  "pip3",
+  "forge",
+  "rgsx",
+  "rain",
   // Test-runner'lar (TASK-128): session açılmazsa after-hook erken döner ve
   // hata tespiti hiç çalışmaz. Çıplak `node`/`python` YOK — her script
   // session açardı (gürültü); `python -m` phrase olarak var.
-  "pytest", "jest", "vitest",
+  "pytest",
+  "jest",
+  "vitest",
 ])
 const BUILD_PHRASES = new Set<string>([
-  "npm run", "bun run", "yarn run", "pnpm run",
-  "next build", "docker build",
-  "pip install", "pip3 install",
-  "python -m", "npx jest", "npx vitest",
+  "npm run",
+  "bun run",
+  "yarn run",
+  "pnpm run",
+  "next build",
+  "docker build",
+  "pip install",
+  "pip3 install",
+  "python -m",
+  "npx jest",
+  "npx vitest",
 ])
 
 export function isBuildCommand(command: string): boolean {
-
   for (const seg of splitShellSegments(command)) {
     const lower = seg.toLowerCase()
     const parts = lower.split(/\s+/)
@@ -386,10 +400,7 @@ const ERROR_LINE_RE =
  * Hata benzeri satırları yakalar. `maxLines` cap'ine ek olarak `tailLines`
  * kadar son satır her zaman korunur — yığının sonu çoğu zaman kök neden.
  */
-export function extractErrors(
-  output: string,
-  options: ExtractErrorsOptions = {},
-): string[] {
+export function extractErrors(output: string, options: ExtractErrorsOptions = {}): string[] {
   const max = options.maxLines ?? 15
   const tail = options.tailLines ?? 5
   const lines = output.split("\n")

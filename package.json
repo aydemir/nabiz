@@ -7,16 +7,25 @@
     "pi-package"
   ],
   "license": "MIT",
+  "prettier": {
+    "semi": false,
+    "printWidth": 120
+  },
   "workspaces": [
     "packages/*",
     "packages/harness-opencode/plugins/mcp-bash-tools"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "build:core": "npm run build --workspace nabiz-core"
+    "build:core": "npm run build --workspace nabiz-core",
+    "format": "prettier --write \"packages/*/src/**/*.{ts,mjs,js}\" \"packages/harness-opencode/{plugins,plugin,scripts,tests}/**/*.{ts,mjs}\" \"extensions/**/*.ts\" \"scripts/**/*.mjs\"",
+    "format:check": "prettier --check \"packages/*/src/**/*.{ts,mjs,js}\" \"packages/harness-opencode/{plugins,plugin,scripts,tests}/**/*.{ts,mjs}\" \"extensions/**/*.ts\" \"scripts/**/*.mjs\"",
+    "lint": "oxlint packages/*/src packages/harness-opencode/plugins packages/harness-opencode/plugin extensions scripts"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
+    "oxlint": "1.60.0",
+    "prettier": "3.6.2",
     "typescript": "^5.6.0"
   },
   "repository": {

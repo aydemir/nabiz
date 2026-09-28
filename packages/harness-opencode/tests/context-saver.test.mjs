@@ -210,7 +210,11 @@ test("context-saver: alwaysRawCommands bypasses prune on match", async () => {
 test("context-saver: disableForCalls gives N raw calls then resumes prune", async () => {
   const { toolHooks } = await setupV2(ToolCompactPlugin, { disableForCalls: 2 })
   const big = "z".repeat(5000)
-  const cases = [["40", true], ["41", true], ["42", false]]
+  const cases = [
+    ["40", true],
+    ["41", true],
+    ["42", false],
+  ]
   for (const [id, raw] of cases) {
     await toolBefore(toolHooks, { id, sessionID: "c-1", input: { command: "echo x" } })
     const out = await toolAfter(toolHooks, {

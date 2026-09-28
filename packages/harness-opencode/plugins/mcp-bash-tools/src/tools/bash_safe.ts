@@ -17,8 +17,7 @@ export const bashSafeSchema = {
   properties: {
     command: {
       type: "string",
-      description:
-        "Bash command to execute (passed to bash -c; on Windows: ComSpec/cmd semantics).",
+      description: "Bash command to execute (passed to bash -c; on Windows: ComSpec/cmd semantics).",
     },
     description: {
       type: "string",
@@ -67,10 +66,7 @@ function pruneMiddle(
   const head = Array.from(text).slice(0, headChars).join("")
   const tail = Array.from(text).slice(-tailChars).join("")
   const keptChars = headChars + tailChars
-  const saved =
-    originalChars === 0
-      ? 0
-      : Math.round(((originalChars - keptChars) / originalChars) * 1000) / 10
+  const saved = originalChars === 0 ? 0 : Math.round(((originalChars - keptChars) / originalChars) * 1000) / 10
   const marker = MARKER_FORMAT.replace("{original}", String(originalChars))
     .replace("{kept}", String(keptChars))
     .replace("{saved}", String(saved))
@@ -99,17 +95,16 @@ export async function bashSafeHandler(
   // Hata varsa: ham stderr'i göster (kırpma yok).
   if (result.exitCode !== 0) {
     const errLines = extractErrorLines(result.stderr || combined)
-    const text = errLines.length > 0
-      ? `⚠️ ${description}\n${errLines.join("\n")}\n⏱️ ${result.durationMs}ms (exit ${result.exitCode})`
-      : `⚠️ ${description}\n[exit ${result.exitCode}]\n${result.stderr || combined.slice(0, 1000)}\n⏱️ ${result.durationMs}ms`
+    const text =
+      errLines.length > 0
+        ? `⚠️ ${description}\n${errLines.join("\n")}\n⏱️ ${result.durationMs}ms (exit ${result.exitCode})`
+        : `⚠️ ${description}\n[exit ${result.exitCode}]\n${result.stderr || combined.slice(0, 1000)}\n⏱️ ${result.durationMs}ms`
     return { isError: true, content: [{ type: "text", text }] }
   }
 
   const { pruned, originalChars, keptChars } = pruneMiddle(combined, headChars, tailChars, maxChars)
   const wasPruned = originalChars > maxChars
-  const summary = wasPruned
-    ? `[${description}] (${originalChars} chars → pruned to ${keptChars})`
-    : `[${description}]`
+  const summary = wasPruned ? `[${description}] (${originalChars} chars → pruned to ${keptChars})` : `[${description}]`
 
   const text = `${summary}\n${pruned}\n⏱️ ${result.durationMs}ms`
   return { content: [{ type: "text", text }] }

@@ -12,11 +12,7 @@ import assert from "node:assert/strict"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import {
-  formatProgress,
-  parseProgressLine,
-  readLastProgress,
-} from "nabiz-core/progress"
+import { formatProgress, parseProgressLine, readLastProgress } from "nabiz-core/progress"
 import { resolveEventDirs } from "nabiz-core/settle-notice"
 import hbmonFactory from "../dist/plugins/opencode-hbmon.js"
 import { setupV2 } from "./v2-harness.mjs"
@@ -30,16 +26,12 @@ function fixtureDir(lines) {
 const L = (o) => JSON.stringify(o)
 
 test("parse: geçerli kayıt + bozuk satırlar atlanır", () => {
-  const ok = parseProgressLine(
-    L({ ts: "t", name: "j", event: "HEARTBEAT", detail: "d", log: "l" }),
-  )
+  const ok = parseProgressLine(L({ ts: "t", name: "j", event: "HEARTBEAT", detail: "d", log: "l" }))
   assert.deepEqual(ok, { ts: "t", name: "j", event: "HEARTBEAT", detail: "d" })
   assert.equal(parseProgressLine("bozuk {"), null)
   assert.equal(parseProgressLine(""), null)
   assert.equal(parseProgressLine(L({ ts: "t" })), null)
-  const withExit = parseProgressLine(
-    L({ ts: "t", name: "j", event: "PASSED", detail: "d", exit: 0 }),
-  )
+  const withExit = parseProgressLine(L({ ts: "t", name: "j", event: "PASSED", detail: "d", exit: 0 }))
   assert.equal(withExit?.exit, 0)
 })
 
@@ -72,10 +64,7 @@ test("readLastProgress: fail-open (dizin/dosya yok)", () => {
 })
 
 test("formatProgress: exit'li / exit'siz", () => {
-  assert.equal(
-    formatProgress({ ts: "t", name: "a", event: "HEARTBEAT", detail: "d" }),
-    "progress: HEARTBEAT (t): d",
-  )
+  assert.equal(formatProgress({ ts: "t", name: "a", event: "HEARTBEAT", detail: "d" }), "progress: HEARTBEAT (t): d")
   assert.equal(
     formatProgress({ ts: "t", name: "a", event: "PASSED", detail: "d", exit: 0 }),
     "progress: PASSED (t): d (exit=0)",
@@ -83,10 +72,7 @@ test("formatProgress: exit'li / exit'siz", () => {
 })
 
 test("kaynakta polling yok", () => {
-  const src = readFileSync(
-    new URL("../../core/src/progress.ts", import.meta.url),
-    "utf8",
-  )
+  const src = readFileSync(new URL("../../core/src/progress.ts", import.meta.url), "utf8")
   const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")
   assert.ok(!code.includes("setInterval("), "setInterval çağrısı yasak")
   assert.ok(!code.includes("setTimeout("), "setTimeout çağrısı yasak")

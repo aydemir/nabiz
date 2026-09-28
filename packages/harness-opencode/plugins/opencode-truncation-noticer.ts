@@ -95,7 +95,7 @@ function resultToText(result: { content?: unknown }): string {
 export default Plugin.define({
   id: "opencode-truncation-noticer",
   async setup(ctx) {
-    const userConfig = ((ctx.options ?? {}) as TruncationNoticeConfig) as TruncationNoticeConfig
+    const userConfig = (ctx.options ?? {}) as TruncationNoticeConfig as TruncationNoticeConfig
     const config = { ...DEFAULT_CONFIG, ...userConfig }
     // watchTools merge edilir (replace değil): kullanıcı kendi girdisini
     // eklediğinde default `read` koruması sessizce uçmaz. Dedupe'lu birleşim.

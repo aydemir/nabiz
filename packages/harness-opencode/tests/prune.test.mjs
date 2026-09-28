@@ -43,10 +43,7 @@ test("pruneMiddle: second pass on already-pruned input throws (fail-fast guard)"
   // bu test güncellenmeli.
   const big = "X".repeat(1000)
   const once = pruneMiddle(big, { headChars: 100, tailChars: 50 })
-  assert.throws(
-    () => pruneMiddle(once, { headChars: 100, tailChars: 50 }),
-    /replacement.*must be < input/,
-  )
+  assert.throws(() => pruneMiddle(once, { headChars: 100, tailChars: 50 }), /replacement.*must be < input/)
 })
 
 test("resolvePruneBudget: valid head+marker+tail under threshold is OK", () => {
@@ -54,9 +51,7 @@ test("resolvePruneBudget: valid head+marker+tail under threshold is OK", () => {
 })
 
 test("resolvePruneBudget: invalid budget throws", () => {
-  assert.throws(() =>
-    resolvePruneBudget({ compressThreshold: 100, headChars: 100, tailChars: 50 }),
-  )
+  assert.throws(() => resolvePruneBudget({ compressThreshold: 100, headChars: 100, tailChars: 50 }))
 })
 
 test("isBuildCommand: tokens + phrases + chained segments", () => {
@@ -78,14 +73,9 @@ test("isBuildCommand: case-insensitive first token", () => {
 })
 
 test("extractErrors: captures error lines + last-tail always kept", () => {
-  const out = [
-    "line1",
-    "error: something failed",
-    "line3",
-    "TypeError: x is not defined",
-    "line5",
-    "line6 tail",
-  ].join("\n")
+  const out = ["line1", "error: something failed", "line3", "TypeError: x is not defined", "line5", "line6 tail"].join(
+    "\n",
+  )
   const errs = extractErrors(out, { maxLines: 15, tailLines: 5 })
   assert.ok(errs.some((l) => l.includes("error: something failed")))
   assert.ok(errs.some((l) => l.includes("TypeError")))
@@ -174,10 +164,7 @@ test("formatShortPruneMarker: lists all 5 escape ways with default skipWhenConta
 })
 
 test("formatShortPruneMarker: respects custom skipWhenContains", () => {
-  const out = formatShortPruneMarker(
-    { originalChars: 1000, keptChars: 200 },
-    { skipWhenContains: "%%raw%%" },
-  )
+  const out = formatShortPruneMarker({ originalChars: 1000, keptChars: 200 }, { skipWhenContains: "%%raw%%" })
   assert.match(out, /%%raw%%/)
   assert.doesNotMatch(out, /#no-prune/)
 })
@@ -230,5 +217,5 @@ test("isBuildCommand: bare interpreters stay quiet (noise guard, TASK-128)", () 
   assert.equal(isBuildCommand("python script.py"), false)
   assert.equal(isBuildCommand("node server.js"), false)
   assert.equal(isBuildCommand("npx eslint ."), false)
-  assert.equal(isBuildCommand("python3 -c \"print(1)\""), false)
+  assert.equal(isBuildCommand('python3 -c "print(1)"'), false)
 })

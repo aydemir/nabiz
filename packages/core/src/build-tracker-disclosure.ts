@@ -20,6 +20,6 @@ export const BUILD_TRACKER_TEXT =
   "`npx jest/vitest` phrases); shell segments split on |/&&/;. " +
   "Timed (thresholdMs, default 120s) — overruns log `[Build Hook] onThresholdExceeded` " +
   "but keep running. Failures match error lines plus `extraErrorPatterns` " +
-  "(e.g. pytest: [\"^FAILED\\s\"]). Status is recorded in plugin storage as " +
+  '(e.g. pytest: ["^FAILED\\s"]). Status is recorded in plugin storage as ' +
   "`Build success/failed: <cmd>`; stdout stays silent (no toast, no chat) — " +
   "tool output carries the details."

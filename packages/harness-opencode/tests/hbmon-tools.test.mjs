@@ -104,9 +104,7 @@ function shimBin(t, uuid) {
 }
 
 function seq(s, responses) {
-  responses.forEach((r, i) =>
-    writeFileSync(join(s.seq, `${i}.json`), JSON.stringify(r)),
-  )
+  responses.forEach((r, i) => writeFileSync(join(s.seq, `${i}.json`), JSON.stringify(r)))
 }
 
 const DONE = { v: 1, id: "x", ok: true, state: "done", code: 0, duration_sec: 38.5 }
@@ -175,7 +173,10 @@ test("summarizeWait: durum cümleleri", () => {
     "dep_missing (exit 2) in 3.0s — log'a bak, bitmesini bekleme",
   )
   assert.equal(summarizeWait({ state: "failed", code: 1 }, 1), "failed code=1")
-  assert.equal(summarizeWait({ state: "stalled", woke_on: "stall_suspect" }, 0), "woke_on=stall_suspect state=stalled — hbmon_status ile detaya bak")
+  assert.equal(
+    summarizeWait({ state: "stalled", woke_on: "stall_suspect" }, 0),
+    "woke_on=stall_suspect state=stalled — hbmon_status ile detaya bak",
+  )
 })
 
 test("plugin: V2 define + 7 tool + kapalı-modu", async () => {

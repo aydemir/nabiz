@@ -16,27 +16,29 @@
 //
 // Kullanım: node scripts/check-symlink.mjs
 
-import { mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 function main() {
-  const dir = mkdtempSync(join(tmpdir(), "nabiz-symlink-check-"));
-  const target = join(dir, "target.txt");
-  const link = join(dir, "link");
-  let code = null;
+  const dir = mkdtempSync(join(tmpdir(), "nabiz-symlink-check-"))
+  const target = join(dir, "target.txt")
+  const link = join(dir, "link")
+  let code = null
   try {
-    writeFileSync(target, "x");
-    symlinkSync(target, link);
-    unlinkSync(link);
-    console.log("ok: symlink kurulabiliyor (npm workspaces hazır)");
-    return 0;
+    writeFileSync(target, "x")
+    symlinkSync(target, link)
+    unlinkSync(link)
+    console.log("ok: symlink kurulabiliyor (npm workspaces hazır)")
+    return 0
   } catch (e) {
-    code = e?.code ?? String(e);
+    code = e?.code ?? String(e)
   } finally {
     try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch { /* yok say */ }
+      rmSync(dir, { recursive: true, force: true })
+    } catch {
+      /* yok say */
+    }
   }
   if (code === "EPERM" || code === "EACCES") {
     console.error(
@@ -45,11 +47,11 @@ function main() {
         "  1. Terminali yönetici olarak çalıştırıp tekrar dene, ya da\n" +
         "  2. Geliştirici Modu'nu aç (Ayarlar → Gizlilik ve Güvenlik → Geliştiriciler için),\n" +
         "  3. sonra: npm install && npm run build",
-    );
-    return 1;
+    )
+    return 1
   }
-  console.error(`hata: symlink denemesi beklenmedik kodla düştü: ${code}`);
-  return 1;
+  console.error(`hata: symlink denemesi beklenmedik kodla düştü: ${code}`)
+  return 1
 }
 
-process.exit(main());
+process.exit(main())

@@ -145,7 +145,12 @@ test("formatCursorReceipt: makbuz + ipucu + boş-EOF (NABIZ-001)", () => {
   const empty = formatCursorReceipt("derle", 16, { nextOffset: 16, size: 16, truncated: false }, "")
   assert.match(empty, /\(yeni çıktı yok\)/)
   // NABIZ-009 P1: capped receipt'te görünür, yoksa görünmez
-  const capped = formatCursorReceipt("derle", 0, { nextOffset: 51200, size: 300000, truncated: true, capped: OUT_CURSOR_CAP }, "x".repeat(10))
+  const capped = formatCursorReceipt(
+    "derle",
+    0,
+    { nextOffset: 51200, size: 300000, truncated: true, capped: OUT_CURSOR_CAP },
+    "x".repeat(10),
+  )
   assert.match(capped, /capped="51200"/)
   assert.ok(!r.includes("capped"))
   assert.ok(!done.includes("capped"))
@@ -233,7 +238,9 @@ test("bg_run: bekçi NABIZ_WAKE_NODE runtime ile spawn edilir (V2 execPath=openc
       await new Promise((r) => setTimeout(r, 50))
       try {
         body = readFileSync(wakeLog, "utf8")
-      } catch { /* henüz yok */ }
+      } catch {
+        /* henüz yok */
+      }
     }
     assert.ok(body.includes("--session ses_t"), `bekçi argv wake log'da olmalı: ${body.slice(0, 200)}`)
   } finally {
@@ -247,10 +254,7 @@ test("bg_run: bekçi NABIZ_WAKE_NODE runtime ile spawn edilir (V2 execPath=openc
 test("bg_run: name validasyonu (daemon yok)", async () => {
   const { addedTools } = await setupV2(hbmonFactory, {})
   const bgRun = addedTools.find((t) => t.name === "bg_run")
-  const bad = await bgRun.execute(
-    { name: "kötü ad!", command: "echo x" },
-    { sessionID: "ses_t" },
-  )
+  const bad = await bgRun.execute({ name: "kötü ad!", command: "echo x" }, { sessionID: "ses_t" })
   assert.match(textOf(bad.content), /HATA.*name/)
 })
 
@@ -261,17 +265,28 @@ test("bg-wake: üretim enjeksiyon metni wakeMessage ile birebir (NABIZ-010)", as
   const stub = join(dir, "opencode")
   writeFileSync(stub, '#!/bin/sh\nlast=""; for a in "$@"; do last="$a"; done\nprintf \'%s\' "$last" > "$MSG"\nexit 0\n')
   chmodSync(stub, 0o755)
-  const runWake = (logLine, tag) => new Promise((resolve) => {
-    const log = join(dir, `${tag}.jsonl`)
-    writeFileSync(log, logLine + "\n")
-    const msgFile = join(dir, `${tag}.msg.txt`)
-    execFile(
-      process.execPath,
-      ["scripts/bg-wake.mjs", "--session", "ses_x", "--sock", join(dir, `${tag}.sock`), "--log", log, "--name", "derle"],
-      { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, MSG: msgFile } },
-      (err, stdout) => resolve({ code: err?.code ?? 0, stdout: String(stdout), msgFile }),
-    )
-  })
+  const runWake = (logLine, tag) =>
+    new Promise((resolve) => {
+      const log = join(dir, `${tag}.jsonl`)
+      writeFileSync(log, logLine + "\n")
+      const msgFile = join(dir, `${tag}.msg.txt`)
+      execFile(
+        process.execPath,
+        [
+          "scripts/bg-wake.mjs",
+          "--session",
+          "ses_x",
+          "--sock",
+          join(dir, `${tag}.sock`),
+          "--log",
+          log,
+          "--name",
+          "derle",
+        ],
+        { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, MSG: msgFile } },
+        (err, stdout) => resolve({ code: err?.code ?? 0, stdout: String(stdout), msgFile }),
+      )
+    })
   // jsonl'da terminal olay → bekçi doğrudan enjekte eder (daemon yok).
   const r1 = await runWake(JSON.stringify({ ev: "exit", state: "done", code: 0 }), "a")
   assert.equal(r1.code, 0)
@@ -301,9 +316,7 @@ test("LIVE e2e: bg_run→status→logs→kill (gerçek daemon)", { skip: !LIVE }
   const runTool = async (name, input, ctx) => textOf((await tool(name).execute(input, ctx)).content)
   const ctx = { sessionID: "ses_live" }
   const name = `livetest-${Date.now().toString(36)}`
-  const run = String(
-    await runTool("bg_run", { name, command: "echo hi-live && sleep 30", notify: false }, ctx),
-  )
+  const run = String(await runTool("bg_run", { name, command: "echo hi-live && sleep 30", notify: false }, ctx))
   assert.match(run, /bg_run OK/)
   const id = run.match(/id=([0-9a-f]+)/)?.[1]
   assert.ok(id, "uuid dönmeli")
@@ -356,7 +369,7 @@ if (cmd === "session" && a[1] === "export") {
   process.exit(0);
 }
 process.exit(2);
-`;
+`
   writeFileSync(stub, code)
   chmodSync(stub, 0o755)
   // Process-wait fazını atlamak için terminal olay önceden yazılır.
@@ -371,12 +384,28 @@ async function runWake(dir, sockBase, taskId, extra = []) {
     execFile(
       process.execPath,
       [
-        "scripts/bg-wake.mjs", ...extra,
-        "--session", "ses_x", "--sock", sockBase + ".sock",
-        "--name", "n", "--task-id", taskId,
-        "--verify-timeout-sec", "25", "--poll-sec", "1", "--persist-gap-sec", "2",
-        "--backoff-sec", "2", "--max-injections", "3",
-        "--attempt-log", join(dir, "attempts.jsonl"),
+        "scripts/bg-wake.mjs",
+        ...extra,
+        "--session",
+        "ses_x",
+        "--sock",
+        sockBase + ".sock",
+        "--name",
+        "n",
+        "--task-id",
+        taskId,
+        "--verify-timeout-sec",
+        "25",
+        "--poll-sec",
+        "1",
+        "--persist-gap-sec",
+        "2",
+        "--backoff-sec",
+        "2",
+        "--max-injections",
+        "3",
+        "--attempt-log",
+        join(dir, "attempts.jsonl"),
       ],
       { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } },
       (err, stdout, stderr) => resolve({ code: err?.code ?? 0, stdout: String(stdout), stderr: String(stderr) }),
@@ -387,7 +416,10 @@ async function runWake(dir, sockBase, taskId, extra = []) {
 function readAttempts(dir) {
   const p = join(dir, "attempts.jsonl")
   if (!existsSync(p)) return []
-  return readFileSync(p, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l))
+  return readFileSync(p, "utf8")
+    .split("\n")
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l))
 }
 
 function readState(statePath) {
@@ -444,7 +476,10 @@ test("adapter: aynı taskId tekrar = yeni injection yok (already-confirmed)", as
   const f = await makeFakeOpencode("idle", {
     runs: 0,
     messages: [
-      { info: { role: "user", time: { created: T0 } }, parts: [{ type: "text", text: "[bg] n → done (exit 0). x [wake:t-pre]" }] },
+      {
+        info: { role: "user", time: { created: T0 } },
+        parts: [{ type: "text", text: "[bg] n → done (exit 0). x [wake:t-pre]" }],
+      },
       { info: { role: "assistant", time: { created: T0 + 50 } }, parts: [{ type: "text", text: "ack" }] },
     ],
   })

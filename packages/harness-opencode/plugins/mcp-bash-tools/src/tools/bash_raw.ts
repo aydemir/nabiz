@@ -15,8 +15,7 @@ export const bashRawSchema = {
   properties: {
     command: {
       type: "string",
-      description:
-        "Bash command to execute (passed to bash -c; on Windows: ComSpec/cmd semantics).",
+      description: "Bash command to execute (passed to bash -c; on Windows: ComSpec/cmd semantics).",
     },
     description: {
       type: "string",
@@ -59,9 +58,10 @@ export async function bashRawHandler(
 
   if (result.exitCode !== 0) {
     const errLines = extractErrorLines(result.stderr || combined)
-    const text = errLines.length > 0
-      ? `⚠️ ${description}\n${errLines.join("\n")}\n⏱️ ${result.durationMs}ms (exit ${result.exitCode})`
-      : `⚠️ ${description}\n[exit ${result.exitCode}]\n${result.stderr || combined.slice(0, 1000)}\n⏱️ ${result.durationMs}ms`
+    const text =
+      errLines.length > 0
+        ? `⚠️ ${description}\n${errLines.join("\n")}\n⏱️ ${result.durationMs}ms (exit ${result.exitCode})`
+        : `⚠️ ${description}\n[exit ${result.exitCode}]\n${result.stderr || combined.slice(0, 1000)}\n⏱️ ${result.durationMs}ms`
     return { isError: true, content: [{ type: "text", text }] }
   }
 

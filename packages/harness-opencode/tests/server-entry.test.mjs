@@ -1,5 +1,8 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+// İstisna (stil kuralı: yıldız import yok): modül-şekil iddiası
+// (tam altı export) namespace gerektirir; adlandırılmış import
+// fazladan export'u yakalayamaz.
 import * as serverEntry from "../dist/plugins/server.js"
 import { setupV2, hasHook } from "./v2-harness.mjs"
 
@@ -27,10 +30,7 @@ test("server entry: every definition sets up hooks or tools", async () => {
   for (const [name, def] of Object.entries(serverEntry)) {
     const { sessionHooks, toolHooks, addedTools, cleanup } = await setupV2(def, {})
     const hookCount = Object.keys(sessionHooks).length + Object.keys(toolHooks).length
-    assert.ok(
-      hookCount > 0 || addedTools.length > 0,
-      `${name} must register session/tool hooks or add tools`,
-    )
+    assert.ok(hookCount > 0 || addedTools.length > 0, `${name} must register session/tool hooks or add tools`)
     await cleanup?.()
   }
 })

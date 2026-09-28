@@ -25,7 +25,10 @@ test("bundle: tüm hook'lar + 7 hbmon tool'u kaydolur", async () => {
     assert.ok(hasHook(toolHooks, "execute.before"))
     assert.ok(hasHook(toolHooks, "execute.after"))
     for (const name of ["hbmon_watch", "hbmon_wait", "hbmon_status", "bg_run", "bg_status", "bg_logs", "bg_kill"]) {
-      assert.ok(addedTools.some((t) => t.name === name), `${name} registered`)
+      assert.ok(
+        addedTools.some((t) => t.name === name),
+        `${name} registered`,
+      )
     }
   } finally {
     await cleanup?.()
@@ -38,7 +41,10 @@ test("bundle: disclosure'lar tek context hook'unda birleşir", async () => {
     const e = await sessionContext(sessionHooks, [])
     const texts = systemTexts(e.system)
     for (const sentinel of ["[context-saver]", "[build-tracker]", "[tn-", "[cpu-liveness]", "[sn-"]) {
-      assert.ok(texts.some((t) => t.includes(sentinel)), `${sentinel} pushed`)
+      assert.ok(
+        texts.some((t) => t.includes(sentinel)),
+        `${sentinel} pushed`,
+      )
     }
     // İkinci çağrı tekrar eklemez (idempotent).
     const e2 = await sessionContext(sessionHooks, e.system)
@@ -72,14 +78,26 @@ test("bundle: namespaced sub-options disable one plugin, others stay", async () 
     // Gated plugin'lerin hook'u yok...
     const e = await sessionContext(sessionHooks, [])
     const texts = systemTexts(e.system)
-    assert.ok(!texts.some((t) => t.includes("[tn-"))), "tn disclosure yok"
+    ;(assert.ok(!texts.some((t) => t.includes("[tn-"))), "tn disclosure yok")
     assert.ok(!texts.some((t) => t.includes("[cpu-liveness]")), "cl disclosure yok")
     // ...ama diğerleri kaydolmaya devam eder.
-    assert.ok(texts.some((t) => t.includes("[context-saver]")), "cs duruyor")
-    assert.ok(texts.some((t) => t.includes("[build-tracker]")), "bt duruyor")
-    assert.ok(texts.some((t) => t.includes("[sn-")) , "sn duruyor")
+    assert.ok(
+      texts.some((t) => t.includes("[context-saver]")),
+      "cs duruyor",
+    )
+    assert.ok(
+      texts.some((t) => t.includes("[build-tracker]")),
+      "bt duruyor",
+    )
+    assert.ok(
+      texts.some((t) => t.includes("[sn-")),
+      "sn duruyor",
+    )
     assert.ok(hasHook(toolHooks, "execute.before"), "before hook'ları duruyor")
-    assert.ok(addedTools.some((t) => t.name === "bg_run"), "hbmon tool'ları duruyor")
+    assert.ok(
+      addedTools.some((t) => t.name === "bg_run"),
+      "hbmon tool'ları duruyor",
+    )
   } finally {
     await cleanup?.()
   }
@@ -153,7 +171,10 @@ test("bundle: hbmon enabled (default) 7 tool + davranış aynı (NABIZ-008 regre
   const { addedTools, cleanup } = await setupV2(hbmon, {})
   try {
     for (const name of ["hbmon_watch", "hbmon_wait", "hbmon_status", "bg_run", "bg_status", "bg_logs", "bg_kill"]) {
-      assert.ok(addedTools.some((t) => t.name === name), `${name} registered`)
+      assert.ok(
+        addedTools.some((t) => t.name === name),
+        `${name} registered`,
+      )
     }
   } finally {
     await cleanup?.()
@@ -166,9 +187,18 @@ test("bundle: namespaced opencode-hbmon enabled:false — tool yok, diğerleri d
     assert.ok(!addedTools.some((t) => t.name === "bg_run"), "bg_run kaydolmaz")
     const e = await sessionContext(sessionHooks, [])
     const texts = systemTexts(e.system)
-    assert.ok(texts.some((t) => t.includes("[hbmon-disabled]")), "kapalı disclosure var")
-    assert.ok(texts.some((t) => t.includes("[context-saver]")), "cs duruyor")
-    assert.ok(texts.some((t) => t.includes("[build-tracker]")), "bt duruyor")
+    assert.ok(
+      texts.some((t) => t.includes("[hbmon-disabled]")),
+      "kapalı disclosure var",
+    )
+    assert.ok(
+      texts.some((t) => t.includes("[context-saver]")),
+      "cs duruyor",
+    )
+    assert.ok(
+      texts.some((t) => t.includes("[build-tracker]")),
+      "bt duruyor",
+    )
   } finally {
     await cleanup?.()
   }

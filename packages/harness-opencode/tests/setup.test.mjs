@@ -76,7 +76,13 @@ test("computePlan: repo'ya ait stale dosya girdileri temizlenir (V1 plugin + V2 
   const owned0 = join(ROOT, "plugins", "opencode-context-saver.ts")
   const owned1 = join(ROOT, "plugins", "opencode-hbmon.ts")
   const cfg = {
-    mcp: { [MCP_KEY]: { type: "local", command: ["node", join(ROOT, "dist", "plugins", "mcp-bash-tools", "src", "server.js")], enabled: true } },
+    mcp: {
+      [MCP_KEY]: {
+        type: "local",
+        command: ["node", join(ROOT, "dist", "plugins", "mcp-bash-tools", "src", "server.js")],
+        enabled: true,
+      },
+    },
     plugin: [owned0, "/x/baskasinin.ts"],
     plugins: [owned1, { package: owned0, options: {} }, "/y/baskasinin.ts"],
   }
@@ -86,9 +92,7 @@ test("computePlan: repo'ya ait stale dosya girdileri temizlenir (V1 plugin + V2 
   assert.deepEqual(next.plugin, ["/x/baskasinin.ts"])
   assert.deepEqual(next.plugins, ["/y/baskasinin.ts", packageDirFor(ROOT)])
   // mcp zaten günceldi → sadece temizlik değişiklikleri.
-  assert.ok(
-    next.mcp[MCP_KEY].command[1].endsWith("mcp-bash-tools/src/server.js"),
-  )
+  assert.ok(next.mcp[MCP_KEY].command[1].endsWith("mcp-bash-tools/src/server.js"))
 })
 
 test("computePlan: mcp.bash (bizim dist) → mcp.nabiz taşınır, enabled korunur", () => {

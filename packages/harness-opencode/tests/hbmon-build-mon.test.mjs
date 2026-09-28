@@ -16,12 +16,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { execFile } from "node:child_process"
-import {
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs"
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { fileURLToPath } from "node:url"
 import { join, dirname } from "node:path"
@@ -86,9 +81,7 @@ function hbmonOut(uuid) {
 }
 
 function seq(env, responses) {
-  responses.forEach((r, i) =>
-    writeFileSync(join(env.FAKE_SEQ_DIR, `${i}.json`), JSON.stringify(r)),
-  )
+  responses.forEach((r, i) => writeFileSync(join(env.FAKE_SEQ_DIR, `${i}.json`), JSON.stringify(r)))
 }
 
 function run(args, env, execTimeout = 30000) {
@@ -114,17 +107,32 @@ function events(dir) {
 }
 
 const DONE0 = {
-  v: 1, id: "x", ok: true, state: "done", code: 0, duration_sec: 1.2,
+  v: 1,
+  id: "x",
+  ok: true,
+  state: "done",
+  code: 0,
+  duration_sec: 1.2,
   exit_event: { code: 0, raw_code: 0, state: "done" },
 }
 const FAILED1 = {
-  v: 1, id: "x", ok: true, state: "failed", code: 1, duration_sec: 1.0,
+  v: 1,
+  id: "x",
+  ok: true,
+  state: "failed",
+  code: 1,
+  duration_sec: 1.0,
   exit_event: { code: 1, raw_code: 1, state: "failed" },
 }
 const STALL = { v: 1, id: "x", ok: true, state: "running", elapsed_sec: 31.0, woke_on: "stall_suspect" }
 const DEP_EARLY = { v: 1, id: "x", ok: true, state: "running", woke_on: "dep_missing" }
 const DEP_TERM = {
-  v: 1, id: "x", ok: true, state: "dep_missing", code: 2, duration_sec: 3.0,
+  v: 1,
+  id: "x",
+  ok: true,
+  state: "dep_missing",
+  code: 2,
+  duration_sec: 3.0,
   exit_event: { code: 2, raw_code: 1, state: "dep_missing" },
 }
 
@@ -202,10 +210,10 @@ test("hbmon yoksa exit 2 + kurulum ipucu", async () => {
 
 test("CANLI PASSED (gerçek hbmon)", { skip: !LIVE }, async () => {
   const d = mktmp()
-  const r = await run(
-    ["--name", "lp1", "--event-dir", d, "--", NODE, "-e", ""],
-    { ...process.env, HBMON_BIN: process.env.HBMON_BIN || "hbmon" },
-  )
+  const r = await run(["--name", "lp1", "--event-dir", d, "--", NODE, "-e", ""], {
+    ...process.env,
+    HBMON_BIN: process.env.HBMON_BIN || "hbmon",
+  })
   assert.equal(r.exit, 0)
   const st = JSON.parse(readFileSync(join(d, "lp1.status.json"), "utf8"))
   assert.equal(st.exit, 0)
@@ -215,8 +223,7 @@ test("CANLI FAILED excerpt (gerçek hbmon)", { skip: !LIVE }, async () => {
   const d = mktmp()
   const env = { ...process.env, HBMON_BIN: process.env.HBMON_BIN || "hbmon" }
   const r = await run(
-    ["--name", "lf1", "--event-dir", d, "--",
-      NODE, "-e", "console.error('error TS9999: boom'); process.exit(1)"],
+    ["--name", "lf1", "--event-dir", d, "--", NODE, "-e", "console.error('error TS9999: boom'); process.exit(1)"],
     env,
     60000,
   )

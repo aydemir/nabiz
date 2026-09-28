@@ -49,15 +49,15 @@ const DEFAULT_CONFIG: BuildConfig = {
 }
 
 const BUILD_ERROR_PATTERNS = [
-  /^error\[/m,           // rustc: error[E0425]
-  /^npm ERR!/m,          // npm: npm ERR!
-  /^\s*error TS\d+/m,    // tsc: error TS2304
-  /^\s*→/m,              // biome, rust diagnostic
-  /^FAILED:/m,           // bazel, buck
-  /^FAIL\b/m,            // generic FAIL
-  /^make.*\*\*\* /m,     // make: *** Error
-  /^\s*error:/m,         // generic "error:" prefix (cargo, biome)
-  /^error\b/m,           // yarn berry, pnpm (satır başı "error")
+  /^error\[/m, // rustc: error[E0425]
+  /^npm ERR!/m, // npm: npm ERR!
+  /^\s*error TS\d+/m, // tsc: error TS2304
+  /^\s*→/m, // biome, rust diagnostic
+  /^FAILED:/m, // bazel, buck
+  /^FAIL\b/m, // generic FAIL
+  /^make.*\*\*\* /m, // make: *** Error
+  /^\s*error:/m, // generic "error:" prefix (cargo, biome)
+  /^error\b/m, // yarn berry, pnpm (satır başı "error")
 ] as const
 
 function getCommandFromArgs(args: unknown): string {
@@ -231,9 +231,7 @@ export default Plugin.define({
 
       if (hasError) {
         if (config.verbose) {
-          console.log(
-            `[Build Hook] ❌ onBuildFailure: ${event.tool} — errors detected in ${formatDuration(duration)}`,
-          )
+          console.log(`[Build Hook] ❌ onBuildFailure: ${event.tool} — errors detected in ${formatDuration(duration)}`)
         }
         return endSession("failed")
       }
@@ -282,9 +280,7 @@ export default Plugin.define({
           const type = e.type as string
           if (type === "command.executed" || type === "tui.command.execute") {
             const cmd =
-              (e as { command?: unknown }).command ??
-              (e as { data?: { command?: unknown } }).data?.command ??
-              ""
+              (e as { command?: unknown }).command ?? (e as { data?: { command?: unknown } }).data?.command ?? ""
             if (typeof cmd === "string" && isBuildCommand(cmd)) {
               startFromEvent(cmd, "event")
             }

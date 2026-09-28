@@ -5,7 +5,7 @@
  * exit code, stderr/stdout ayrımı, hata satırı çıkarma.
  */
 
-import { exec, ExecException } from "node:child_process"
+import { exec } from "node:child_process"
 import { promisify } from "node:util"
 
 const execAsync = promisify(exec)
@@ -45,10 +45,7 @@ export interface ExecError extends Error {
   stderr?: string
 }
 
-export async function runBash(
-  command: string,
-  timeoutMs: number,
-): Promise<ExecResult> {
+export async function runBash(command: string, timeoutMs: number): Promise<ExecResult> {
   const start = Date.now()
   try {
     const { stdout, stderr } = await execAsync(command, {

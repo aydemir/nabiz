@@ -129,9 +129,7 @@ export function resolveEventDirs(
   cwd: string = process.cwd(),
 ): string[] {
   const candidates: string[] =
-    explicit && explicit.length > 0
-      ? explicit
-      : [env["BUILD_MON_DIR"] ?? "", join(cwd, "tmp", "build-mon")]
+    explicit && explicit.length > 0 ? explicit : [env["BUILD_MON_DIR"] ?? "", join(cwd, "tmp", "build-mon")]
   const out: string[] = []
   for (const c of candidates) {
     if (typeof c !== "string" || c.length === 0) continue
@@ -299,7 +297,8 @@ function formatStaleAge(ageMs: number): string {
 /** Bayatlık bildirim metni (çıktı sonuna eklenir). */
 export function buildStaleNotice(records: StaleRecord[]): string {
   const lines = records.map(
-    (r) => `${STALE_SENTINEL} ${r.name} son olay ${r.event} ${formatStaleAge(r.ageMs)} önce (monitör sessiz — final yok) [${r.statusPath}]`,
+    (r) =>
+      `${STALE_SENTINEL} ${r.name} son olay ${r.event} ${formatStaleAge(r.ageMs)} önce (monitör sessiz — final yok) [${r.statusPath}]`,
   )
   return "\n\n" + lines.join("\n") + "\n"
 }
@@ -311,9 +310,5 @@ export function buildStaleNotice(records: StaleRecord[]): string {
  */
 export function buildPendingSuffix(records: SettleRecord[]): string {
   if (records.length === 0) return ""
-  return (
-    " Pending settles: " +
-    records.map((r) => `${r.name} ${r.event} (exit=${r.exit})`).join("; ") +
-    "."
-  )
+  return " Pending settles: " + records.map((r) => `${r.name} ${r.event} (exit=${r.exit})`).join("; ") + "."
 }

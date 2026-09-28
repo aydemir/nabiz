@@ -6,12 +6,22 @@
  * `default` export eder (TASK-111 getLegacyPlugins kuralı).
  *
  * Kalıcılık: sidecar `<dir>/bg-<uuid>.json` — daemon restart'larından sağ
- * çıkar (`hbmon list` ile birleşir). dir: HBMON_BG_DIR > os.tmpdir().
+ * çıkar (`hbmon list` ile birleşir). dir: HBMON_BG_DIR > tmpdir().
  */
 
-import * as fs from "node:fs"
-import * as os from "node:os"
-import * as path from "node:path"
+import {
+  closeSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  statSync,
+  writeFileSync,
+  type Stats,
+} from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 export interface BgRecord {
   v: 1
@@ -28,21 +38,21 @@ export interface BgRecord {
 /** Sidecar dizini: açık override yoksa hbmon platform convention (~tmpdir). */
 export function bgDir(env: NodeJS.ProcessEnv = process.env): string {
   const direct = (env.HBMON_BG_DIR ?? "").trim()
-  return direct === "" ? os.tmpdir() : direct
+  return direct === "" ? tmpdir() : direct
 }
 
 export function sidecarPath(dir: string, uuid: string): string {
-  return path.join(dir, `bg-${uuid}.json`)
+  return join(dir, `bg-${uuid}.json`)
 }
 
 export function writeRecord(dir: string, rec: BgRecord): void {
-  fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(sidecarPath(dir, rec.uuid), JSON.stringify(rec, null, 2))
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(sidecarPath(dir, rec.uuid), JSON.stringify(rec, null, 2))
 }
 
 export function readRecord(dir: string, uuid: string): BgRecord | undefined {
   try {
-    const raw = fs.readFileSync(sidecarPath(dir, uuid), "utf8")
+    const raw = readFileSync(sidecarPath(dir, uuid), "utf8")
     const r = JSON.parse(raw) as BgRecord
     if (r && r.v === 1 && typeof r.uuid === "string") return r
     return undefined
@@ -54,14 +64,14 @@ export function readRecord(dir: string, uuid: string): BgRecord | undefined {
 export function listRecords(dir: string): BgRecord[] {
   let files: string[] = []
   try {
-    files = fs.readdirSync(dir).filter((f) => f.startsWith("bg-") && f.endsWith(".json"))
+    files = readdirSync(dir).filter((f) => f.startsWith("bg-") && f.endsWith(".json"))
   } catch {
     return []
   }
   const out: BgRecord[] = []
   for (const f of files) {
     try {
-      const r = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")) as BgRecord
+      const r = JSON.parse(readFileSync(join(dir, f), "utf8")) as BgRecord
       if (r && r.v === 1 && typeof r.uuid === "string") out.push(r)
     } catch {
       // bozuk sidecar atlanır
@@ -74,10 +84,7 @@ export function listRecords(dir: string): BgRecord[] {
  * id çözümleme: önce exact name, sonra uuid-prefix (sidecar'larda).
  * Belirsiz prefix (2+ eşleşme) → error.
  */
-export function resolveRecord(
-  dir: string,
-  id: string,
-): { record?: BgRecord; error?: string } {
+export function resolveRecord(dir: string, id: string): { record?: BgRecord; error?: string } {
   const all = listRecords(dir)
   if (all.length === 0) return { error: `bilinmeyen bg görevi: ${id} (kayıt yok)` }
   const byName = all.filter((r) => r.name === id)
@@ -86,26 +93,31 @@ export function resolveRecord(
   const byUuid = all.filter((r) => r.uuid.startsWith(id))
   if (byUuid.length === 1) return { record: byUuid[0] }
   if (byUuid.length > 1) {
-    return { error: `'${id}' prefix'i ${byUuid.length} göreve uyuyor: ${byUuid.map((r) => r.uuid.slice(0, 8)).join(", ")}` }
+    return {
+      error: `'${id}' prefix'i ${byUuid.length} göreve uyuyor: ${byUuid.map((r) => r.uuid.slice(0, 8)).join(", ")}`,
+    }
   }
   return { error: `bilinmeyen bg görevi: ${id}` }
 }
 
-/** .out kuyruğu: en fazla maxBytes (default 50KB, pi bg-hbmon ile aynı cap). */export function readOutTail(outPath: string, maxBytes = 50 * 1024): { text: string; truncated: boolean } {
-  let st: fs.Stats
+/** .out kuyruğu: en fazla maxBytes (default 50KB, pi bg-hbmon ile aynı cap). */ export function readOutTail(
+  outPath: string,
+  maxBytes = 50 * 1024,
+): { text: string; truncated: boolean } {
+  let st: Stats
   try {
-    st = fs.statSync(outPath)
+    st = statSync(outPath)
   } catch {
     return { text: `(çıktı yok: ${outPath})`, truncated: false }
   }
-  const fd = fs.openSync(outPath, "r")
+  const fd = openSync(outPath, "r")
   try {
     const start = Math.max(0, st.size - maxBytes)
     const buf = Buffer.alloc(Math.min(st.size, maxBytes))
-    fs.readSync(fd, buf, 0, buf.length, start)
+    readSync(fd, buf, 0, buf.length, start)
     return { text: buf.toString("utf8"), truncated: start > 0 }
   } finally {
-    fs.closeSync(fd)
+    closeSync(fd)
   }
 }
 
@@ -133,22 +145,41 @@ export function readOutCursor(outPath: string, offset: number, maxBytes = OUT_CU
   if (off < 0) off = 0
   const len = Math.max(1, Math.min(Math.floor(maxBytes), OUT_CURSOR_CAP))
   const capped = Number.isFinite(maxBytes) && Math.floor(maxBytes) > OUT_CURSOR_CAP ? OUT_CURSOR_CAP : undefined
-  let st: fs.Stats
+  let st: Stats
   try {
-    st = fs.statSync(outPath)
+    st = statSync(outPath)
   } catch {
-    return { text: `(çıktı yok: ${outPath})`, nextOffset: 0, size: 0, truncated: false, ...(capped !== undefined ? { capped } : {}) }
+    return {
+      text: `(çıktı yok: ${outPath})`,
+      nextOffset: 0,
+      size: 0,
+      truncated: false,
+      ...(capped !== undefined ? { capped } : {}),
+    }
   }
-  if (off > st.size) return { text: "", nextOffset: st.size, size: st.size, truncated: false, ...(capped !== undefined ? { capped } : {}) }
-  const fd = fs.openSync(outPath, "r")
+  if (off > st.size)
+    return {
+      text: "",
+      nextOffset: st.size,
+      size: st.size,
+      truncated: false,
+      ...(capped !== undefined ? { capped } : {}),
+    }
+  const fd = openSync(outPath, "r")
   try {
     const n = Math.min(len, st.size - off)
     const buf = Buffer.alloc(n)
-    fs.readSync(fd, buf, 0, n, off)
+    readSync(fd, buf, 0, n, off)
     const nextOffset = off + n
-    return { text: buf.toString("utf8"), nextOffset, size: st.size, truncated: nextOffset < st.size, ...(capped !== undefined ? { capped } : {}) }
+    return {
+      text: buf.toString("utf8"),
+      nextOffset,
+      size: st.size,
+      truncated: nextOffset < st.size,
+      ...(capped !== undefined ? { capped } : {}),
+    }
   } finally {
-    fs.closeSync(fd)
+    closeSync(fd)
   }
 }
 
@@ -213,18 +244,18 @@ export interface LogEvent {
  * Bekçi + bg_status, `wait`/`status` boş dönerse buradan terminal state okur.
  */
 export function readLastEvent(logPath: string, tailBytes = 8192): LogEvent | undefined {
-  let st: fs.Stats
+  let st: Stats
   try {
-    st = fs.statSync(logPath)
+    st = statSync(logPath)
   } catch {
     return undefined
   }
   if (st.size === 0) return undefined
-  const fd = fs.openSync(logPath, "r")
+  const fd = openSync(logPath, "r")
   try {
     const start = Math.max(0, st.size - tailBytes)
     const buf = Buffer.alloc(Math.min(st.size, tailBytes))
-    fs.readSync(fd, buf, 0, buf.length, start)
+    readSync(fd, buf, 0, buf.length, start)
     const lines = buf.toString("utf8").split("\n")
     for (let i = lines.length - 1; i >= 0; i--) {
       const t = lines[i].trim()
@@ -238,7 +269,7 @@ export function readLastEvent(logPath: string, tailBytes = 8192): LogEvent | und
     }
     return undefined
   } finally {
-    fs.closeSync(fd)
+    closeSync(fd)
   }
 }
 

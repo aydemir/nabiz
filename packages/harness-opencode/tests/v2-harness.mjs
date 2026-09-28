@@ -80,7 +80,11 @@ export async function setupV2(def, options = {}) {
     session: {
       hook: async (name, cb) => {
         ;(sessionHooks[name] ??= []).push(cb)
-        return { dispose: async () => { sessionHooks[name] = (sessionHooks[name] ?? []).filter((f) => f !== cb) } }
+        return {
+          dispose: async () => {
+            sessionHooks[name] = (sessionHooks[name] ?? []).filter((f) => f !== cb)
+          },
+        }
       },
       prompt: async () => ({}),
       synthetic: async () => ({}),
@@ -92,14 +96,20 @@ export async function setupV2(def, options = {}) {
     tool: {
       hook: async (name, cb) => {
         ;(toolHooks[name] ??= []).push(cb)
-        return { dispose: async () => { toolHooks[name] = (toolHooks[name] ?? []).filter((f) => f !== cb) } }
+        return {
+          dispose: async () => {
+            toolHooks[name] = (toolHooks[name] ?? []).filter((f) => f !== cb)
+          },
+        }
       },
       transform: async (cb) => {
         const editor = {
           list: () => [],
           get: () => undefined,
           namespace: () => {},
-          add: (d) => { addedTools.push(d) },
+          add: (d) => {
+            addedTools.push(d)
+          },
           update: () => {},
           remove: () => {},
         }
@@ -112,12 +122,14 @@ export async function setupV2(def, options = {}) {
     event: { subscribe },
     storage: {
       get: async (k) => store.get(k),
-      set: async (k, v) => { store.set(k, v) },
-      remove: async (k) => { store.delete(k) },
+      set: async (k, v) => {
+        store.set(k, v)
+      },
+      remove: async (k) => {
+        store.delete(k)
+      },
       scan: async ({ prefix }) => ({
-        entries: [...store.entries()]
-          .filter(([k]) => k.startsWith(prefix))
-          .map(([key, value]) => ({ key, value })),
+        entries: [...store.entries()].filter(([k]) => k.startsWith(prefix)).map(([key, value]) => ({ key, value })),
       }),
     },
   }
@@ -126,10 +138,7 @@ export async function setupV2(def, options = {}) {
 }
 
 /** V2 `execute.before` event'i kur + TÜM kayıtlı hook'ları sırayla çalıştır. */
-export async function toolBefore(
-  toolHooks,
-  { tool = "bash", sessionID = "s", id = "c1", input = {} } = {},
-) {
+export async function toolBefore(toolHooks, { tool = "bash", sessionID = "s", id = "c1", input = {} } = {}) {
   const e = { tool, sessionID, agent: "a", messageID: "m", id, input }
   for (const cb of toolHooks["execute.before"] ?? []) await cb(e)
   return e

@@ -52,12 +52,7 @@ export function parseLastLineNo(output: string, sep: string = "\t"): number {
   return last
 }
 
-export function buildMarker(
-  lastLineNo: number,
-  totalLines: number,
-  filePath: string,
-  nextOffset: number,
-): string {
+export function buildMarker(lastLineNo: number, totalLines: number, filePath: string, nextOffset: number): string {
   const remaining = totalLines - lastLineNo
   const cmdHint = `sed -n '${nextOffset},${totalLines}p' ${filePath}`
   return (

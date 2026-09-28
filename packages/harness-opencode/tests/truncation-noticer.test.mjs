@@ -95,9 +95,7 @@ test("end-to-end: integration with real file", () => {
     const offset = 4
     const limit = 4
     const slice = lines.slice(offset - 1, offset - 1 + limit)
-    const fakeOutput = slice
-      .map((l, i) => `${offset + i}${SEP}${l}`)
-      .join("\n") + "\n"
+    const fakeOutput = slice.map((l, i) => `${offset + i}${SEP}${l}`).join("\n") + "\n"
 
     const last = parseLastLineNo(fakeOutput)
     assert.equal(last, 7)

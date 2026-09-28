@@ -19,9 +19,7 @@ import { setupV2, sessionContext, systemTexts } from "./v2-harness.mjs"
 
 // Monorepo: çözümleme çağıranın konumundan yapılır — harness plugin dist'i çapa.
 const THIS_DIR = dirname(fileURLToPath(new URL(".", import.meta.url)))
-const PLUGIN_URL = pathToFileURL(
-  join(THIS_DIR, "dist", "plugins", "opencode-cpu-liveness.js"),
-).href
+const PLUGIN_URL = pathToFileURL(join(THIS_DIR, "dist", "plugins", "opencode-cpu-liveness.js")).href
 const repoPluginsDir = () => join(THIS_DIR, "plugins")
 
 test("sentinel is bracketed marker", () => {
@@ -49,9 +47,7 @@ test("resolveAgentPath: finds real agent script (no npx/registry needed)", () =>
 
 test("resolveAgentPath: source layout (V2 loads .ts in place)", () => {
   // V2 opencode plugin KAYNAĞINI yükler: plugins/*.ts → ../scripts/...
-  const srcUrl = pathToFileURL(
-    join(repoPluginsDir(), "opencode-cpu-liveness.ts"),
-  ).href
+  const srcUrl = pathToFileURL(join(repoPluginsDir(), "opencode-cpu-liveness.ts")).href
   const p = resolveAgentPath(srcUrl)
   assert.ok(p, "agent path must resolve from source layout")
   assert.ok(p.endsWith("cpu-liveness-agent.js"))
@@ -107,7 +103,7 @@ test("drift guard: builder text is info-equivalent to static fallback", () => {
     "0=clean",
     "--allow-kill",
     "/bin/bash -c",
-    "opencode-cpu-liveness\": {\"enabled\": false}",
+    'opencode-cpu-liveness": {"enabled": false}',
   ]) {
     assert.ok(CPU_LIVENESS_TEXT.includes(frag), `fallback has ${frag}`)
     assert.ok(live.includes(frag), `builder has ${frag}`)

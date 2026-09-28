@@ -23,20 +23,11 @@
 
 import { Plugin } from "@opencode/plugin"
 import { spawn } from "node:child_process"
-import * as fs from "node:fs"
-import * as path from "node:path"
+import { closeSync, openSync, statSync } from "node:fs"
+import { basename, dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import {
-  resolveHbmonBin,
-  runHbmon,
-  statusBuild,
-  waitBuild,
-  watchBuild,
-} from "nabiz-core/hbmon-tools"
-import {
-  HBMON_DISABLED_SENTINEL,
-  HBMON_DISABLED_TEXT,
-} from "nabiz-core/hbmon-disclosure"
+import { resolveHbmonBin, runHbmon, statusBuild, waitBuild, watchBuild } from "nabiz-core/hbmon-tools"
+import { HBMON_DISABLED_SENTINEL, HBMON_DISABLED_TEXT } from "nabiz-core/hbmon-disclosure"
 import {
   bgDir,
   createOffsetTracker,
@@ -89,13 +80,15 @@ const DEFAULT_CONFIG: HbmonPluginConfig = {
  */
 function resolveWakeScript(configured: unknown, moduleUrl: string): string {
   if (typeof configured === "string" && configured.trim() !== "") return configured.trim()
-  let dir = path.dirname(fileURLToPath(moduleUrl))
+  let dir = dirname(fileURLToPath(moduleUrl))
   for (let i = 0; i < 4; i++) {
-    const cand = path.join(dir, "scripts", "bg-wake.mjs")
+    const cand = join(dir, "scripts", "bg-wake.mjs")
     try {
-      if (fs.statSync(cand).isFile()) return cand
-    } catch { /* üst dizine */ }
-    const up = path.dirname(dir)
+      if (statSync(cand).isFile()) return cand
+    } catch {
+      /* üst dizine */
+    }
+    const up = dirname(dir)
     if (up === dir) break
     dir = up
   }
@@ -116,7 +109,7 @@ const offsetTracker = createOffsetTracker()
 function resolveWakeNodeBin(): string {
   const override = process.env.NABIZ_WAKE_NODE?.trim()
   if (override) return override
-  const base = path.basename(process.execPath)
+  const base = basename(process.execPath)
   if (/^(node|bun|deno)(\.exe)?$/i.test(base)) return process.execPath
   return "node"
 }
@@ -150,10 +143,7 @@ export default Plugin.define({
       })
       return
     }
-    const bin =
-      typeof config.bin === "string" && config.bin.trim() !== ""
-        ? config.bin.trim()
-        : resolveHbmonBin()
+    const bin = typeof config.bin === "string" && config.bin.trim() !== "" ? config.bin.trim() : resolveHbmonBin()
     const defaultTimeoutSec = config.defaultTimeoutSec ?? 50
 
     // Transform callback'i senkron olmalı (replayable state edit): dış veri
@@ -202,7 +192,9 @@ export default Plugin.define({
           {
             sock: str("hbmon_watch'tan dönen sock"),
             timeout: { ...num(`Daemon tavanı sn (default ${DEFAULT_CONFIG.defaultTimeoutSec}, gateway altı tut)`) },
-            until: { ...optStr("Erken-dönüş sinyalleri, virgüllü (done,dep_missing,stall_suspect). Yoksa yalnızca bitiş.") },
+            until: {
+              ...optStr("Erken-dönüş sinyalleri, virgüllü (done,dep_missing,stall_suspect). Yoksa yalnızca bitiş."),
+            },
           },
           ["sock"],
         ),
@@ -283,15 +275,15 @@ export default Plugin.define({
             try {
               // Bekçi çıktısı dosyaya (kör nokta yok); process detached+unref.
               // Runtime: resolveWakeNodeBin (V2'de execPath opencode'dur).
-              const wakeLog = path.join(dir, `bg-${h.uuid}.wake.log`)
-              const outFd = fs.openSync(wakeLog, "a")
+              const wakeLog = join(dir, `bg-${h.uuid}.wake.log`)
+              const outFd = openSync(wakeLog, "a")
               const child = spawn(
                 resolveWakeNodeBin(),
                 [wake, "--session", sessionID, "--sock", h.sock, "--log", h.log, "--name", args.name],
                 { detached: true, stdio: ["ignore", outFd, outFd] },
               )
               child.unref()
-              fs.closeSync(outFd)
+              closeSync(outFd)
               lines.push(`Uyandırma kuruldu: bitince bu oturumda yeni turn açılır.`)
               lines.push(`Bekçi logu: ${wakeLog}`)
             } catch {
@@ -316,10 +308,7 @@ export default Plugin.define({
           if (!r.record) {
             // NABIZ-005: bg kaydı yoksa build-mon izlemesine düş (name ile).
             // events.jsonl yoksa/eşleşme yoksa sessizce HATA (fail-open).
-            const prog = readLastProgress(
-              resolveEventDirs(undefined, process.env, process.cwd()),
-              args.id,
-            )
+            const prog = readLastProgress(resolveEventDirs(undefined, process.env, process.cwd()), args.id)
             if (prog) return { content: `name=${args.id} ${formatProgress(prog)} (build-mon izlemesi)` }
             return { content: `bg_status HATA: ${r.error}` }
           }
@@ -329,7 +318,9 @@ export default Plugin.define({
             const ev = readLastEvent(r.record.log)
             if (ev && isTerminalState(ev.state)) {
               const dur = typeof ev.duration_sec === "number" ? ` in ${ev.duration_sec.toFixed(1)}s` : ""
-              return { content: `name=${r.record.name} ${ev.state} code=${ev.code ?? "?"}${dur} (monitör kapanmış, log'dan)` }
+              return {
+                content: `name=${r.record.name} ${ev.state} code=${ev.code ?? "?"}${dur} (monitör kapanmış, log'dan)`,
+              }
             }
             return { content: `bg_status name=${r.record.name} BAŞARISIZ: ${s.error}` }
           }
@@ -341,11 +332,18 @@ export default Plugin.define({
         name: "bg_logs",
         description:
           "Arka plan görevinin stdout kuyruğu (.out tail, tail modunda max 512KB). id: name veya uuid-prefix. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür. Cursor (offsetli) modda tavan 50KB — üstü kırpılır, receipt'te capped ile bildirilir.",
-        input: obj({
-          id: str("Görev name veya uuid-prefix (bg_run'dan döner)"),
-          tail_bytes: { ...num("Kuyruk baytı (default 51200; tail modunda max 512000, cursor modunda max 51200 — üstü capped ile kırpılır)") },
-          offset: { ...num("Artımlı okuma bayt konumu (önceki yanıtın next_offset'i; yoksa tail modu)") },
-        }, ["id"]),
+        input: obj(
+          {
+            id: str("Görev name veya uuid-prefix (bg_run'dan döner)"),
+            tail_bytes: {
+              ...num(
+                "Kuyruk baytı (default 51200; tail modunda max 512000, cursor modunda max 51200 — üstü capped ile kırpılır)",
+              ),
+            },
+            offset: { ...num("Artımlı okuma bayt konumu (önceki yanıtın next_offset'i; yoksa tail modu)") },
+          },
+          ["id"],
+        ),
         async execute(input) {
           const args = input as { id: string; tail_bytes?: number; offset?: number }
           const r = resolveRecord(bgDir(), args.id)
@@ -372,7 +370,10 @@ export default Plugin.define({
           if (!r.record) return { content: `bg_kill HATA: ${r.error}` }
           offsetTracker.forget(r.record.uuid)
           const k = await runHbmon(bin, ["kill", "--sock", r.record.sock], 30000)
-          if (k.code !== 0) return { content: `bg_kill name=${r.record.name} BAŞARISIZ (exit ${k.code}): ${(k.stderr || k.stdout).trim().slice(0, 300)}` }
+          if (k.code !== 0)
+            return {
+              content: `bg_kill name=${r.record.name} BAŞARISIZ (exit ${k.code}): ${(k.stderr || k.stdout).trim().slice(0, 300)}`,
+            }
           return { content: `bg_kill OK name=${r.record.name} — bg_status ile teyit et.` }
         },
       })

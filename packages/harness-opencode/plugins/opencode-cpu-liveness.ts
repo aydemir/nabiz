@@ -19,11 +19,7 @@
  */
 
 import { Plugin } from "@opencode/plugin"
-import {
-  buildCpuLivenessText,
-  CPU_LIVENESS_SENTINEL,
-  resolveAgentPath,
-} from "nabiz-core/cpu-liveness-disclosure"
+import { buildCpuLivenessText, CPU_LIVENESS_SENTINEL, resolveAgentPath } from "nabiz-core/cpu-liveness-disclosure"
 
 interface CpuLivenessConfig {
   enabled?: boolean
@@ -44,7 +40,7 @@ function systemText(s: unknown): string {
 export default Plugin.define({
   id: "opencode-cpu-liveness",
   async setup(ctx) {
-    const userConfig = ((ctx.options ?? {}) as CpuLivenessConfig) as CpuLivenessConfig
+    const userConfig = (ctx.options ?? {}) as CpuLivenessConfig as CpuLivenessConfig
     const config = { ...DEFAULT_CONFIG, ...userConfig }
     const text = buildCpuLivenessText(resolveAgentPath(import.meta.url))
 

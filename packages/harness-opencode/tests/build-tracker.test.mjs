@@ -9,7 +9,9 @@ function captureConsole() {
   console.log = (...a) => logs.push(a.join(" "))
   return {
     logs,
-    restore() { console.log = origLog },
+    restore() {
+      console.log = origLog
+    },
   }
 }
 
@@ -107,7 +109,10 @@ test("build-tracker: real rustc error (anchor pattern) IS detected as failure", 
     cap.logs.length = 0
     const errOut = "warning: unused variable\nerror[E0425]: cannot find value `x`\n  --> src/main.rs:5:9"
     await toolAfter(toolHooks, { id: "real1", input: { command: "cargo build" }, output: errOut })
-    assert.ok(cap.logs.some((l) => l.includes("onBuildFailure")), "rustc error algılanmalı")
+    assert.ok(
+      cap.logs.some((l) => l.includes("onBuildFailure")),
+      "rustc error algılanmalı",
+    )
   } finally {
     cap.restore()
   }
@@ -138,7 +143,9 @@ test("build-tracker: failure goes to storage with error level", async () => {
 
 test("build-tracker: storage failure is tolerated (best-effort write)", async () => {
   const h = await setupV2(BuildHooksPlugin, {})
-  h.ctx.storage.set = async () => { throw new Error("disk full") }
+  h.ctx.storage.set = async () => {
+    throw new Error("disk full")
+  }
   await toolBefore(h.toolHooks, { id: "notoast1", input: { command: "npm run build" } })
   await toolAfter(h.toolHooks, { id: "notoast1", input: { command: "npm run build" }, output: "ok" })
   await h.cleanup()
@@ -175,7 +182,10 @@ test("build-tracker: extraErrorPatterns catches pytest FAILED (builtin gap)", as
     const h = await setupV2(BuildHooksPlugin, { verbose: true, extraErrorPatterns: ["^FAILED\\s"] })
     await toolBefore(h.toolHooks, { id: "py1", input: { command: cmd } })
     await toolAfter(h.toolHooks, { id: "py1", input: { command: cmd }, output: pytestOut })
-    assert.ok(cap.logs.some((l) => l.includes("onBuildFailure")), "extra pattern hits")
+    assert.ok(
+      cap.logs.some((l) => l.includes("onBuildFailure")),
+      "extra pattern hits",
+    )
     await h.cleanup()
   } finally {
     cap.restore()
@@ -188,7 +198,10 @@ test("build-tracker: extraErrorPatterns is additive, builtins retained", async (
     const h = await setupV2(BuildHooksPlugin, { verbose: true, extraErrorPatterns: ["^FAILED\\s"] })
     await toolBefore(h.toolHooks, { id: "ad1", input: { command: "npm run build" } })
     await toolAfter(h.toolHooks, { id: "ad1", input: { command: "npm run build" }, output: "npm ERR! boom" })
-    assert.ok(cap.logs.some((l) => l.includes("onBuildFailure")), "builtin still active")
+    assert.ok(
+      cap.logs.some((l) => l.includes("onBuildFailure")),
+      "builtin still active",
+    )
     await h.cleanup()
   } finally {
     cap.restore()
@@ -196,10 +209,7 @@ test("build-tracker: extraErrorPatterns is additive, builtins retained", async (
 })
 
 test("build-tracker: invalid extraErrorPatterns throws at init (fail-loud)", async () => {
-  await assert.rejects(
-    setupV2(BuildHooksPlugin, { extraErrorPatterns: ["(["] }),
-    /invalid extraErrorPatterns/,
-  )
+  await assert.rejects(setupV2(BuildHooksPlugin, { extraErrorPatterns: ["(["] }), /invalid extraErrorPatterns/)
 })
 
 test("build-tracker: mini-disclosure once (sentinel idempotent, TASK-129)", async () => {
@@ -223,8 +233,14 @@ test("build-tracker: array command (hbmon argv) opens a session (TASK-128)", asy
       tool: "hbmon_watch",
       input: { command: ["cargo", "build", "--release"] },
     })
-    assert.ok(cap.logs.some((l) => l.includes("onBuildStart")), "argv session opens")
-    assert.ok(cap.logs.some((l) => l.includes("cargo build --release")), "argv joined")
+    assert.ok(
+      cap.logs.some((l) => l.includes("onBuildStart")),
+      "argv session opens",
+    )
+    assert.ok(
+      cap.logs.some((l) => l.includes("cargo build --release")),
+      "argv joined",
+    )
     await h.cleanup()
   } finally {
     cap.restore()
@@ -236,13 +252,19 @@ test("build-tracker: pytest session + FAILED output + extra pattern = failure (T
   try {
     const h = await setupV2(BuildHooksPlugin, { verbose: true, extraErrorPatterns: ["^FAILED\\s"] })
     await toolBefore(h.toolHooks, { id: "pytest1", input: { command: "pytest tests/ -x" } })
-    assert.ok(cap.logs.some((l) => l.includes("onBuildStart")), "pytest opens session")
+    assert.ok(
+      cap.logs.some((l) => l.includes("onBuildStart")),
+      "pytest opens session",
+    )
     await toolAfter(h.toolHooks, {
       id: "pytest1",
       input: { command: "pytest tests/ -x" },
       output: "FAILED test_x.py::test_bar - assert",
     })
-    assert.ok(cap.logs.some((l) => l.includes("onBuildFailure")), "failure detected")
+    assert.ok(
+      cap.logs.some((l) => l.includes("onBuildFailure")),
+      "failure detected",
+    )
     await h.cleanup()
   } finally {
     cap.restore()
@@ -264,7 +286,10 @@ test("build-tracker: session.shell.started starts a build session (NABIZ-007)", 
     const { pushEvent, cleanup } = await setupV2(BuildHooksPlugin, { verbose: true })
     pushEvent({ type: "session.shell.started", data: { shell: { command: "npm run build" } } })
     await tick()
-    assert.ok(cap.logs.some((l) => l.includes("onBuildStart")), "shell.started build'i başlatmalı")
+    assert.ok(
+      cap.logs.some((l) => l.includes("onBuildStart")),
+      "shell.started build'i başlatmalı",
+    )
     await cleanup()
   } finally {
     cap.restore()
@@ -279,7 +304,10 @@ test("build-tracker: session.shell.ended closes session success/failed (NABIZ-00
     await tick()
     pushEvent({
       type: "session.shell.ended",
-      data: { shell: { command: "npm run build" }, output: { output: "build succeeded", cursor: 0, size: 0, truncated: false } },
+      data: {
+        shell: { command: "npm run build" },
+        output: { output: "build succeeded", cursor: 0, size: 0, truncated: false },
+      },
     })
     await tick()
     assert.ok(store.get("nabiz:last-build").message.includes("Build success"), "temiz çıktı success")
@@ -292,10 +320,16 @@ test("build-tracker: session.shell.ended closes session success/failed (NABIZ-00
     const { pushEvent, store, cleanup } = await setupV2(BuildHooksPlugin, { verbose: true })
     pushEvent({
       type: "session.shell.ended",
-      data: { shell: { command: "cargo build" }, output: { output: "npm ERR! code 1\nfailed", cursor: 0, size: 0, truncated: false } },
+      data: {
+        shell: { command: "cargo build" },
+        output: { output: "npm ERR! code 1\nfailed", cursor: 0, size: 0, truncated: false },
+      },
     })
     await tick()
-    assert.ok(store.get("nabiz:last-build").message.includes("Build failed"), "hatalı çıktı failed (started kaçsa bile)")
+    assert.ok(
+      store.get("nabiz:last-build").message.includes("Build failed"),
+      "hatalı çıktı failed (started kaçsa bile)",
+    )
     await cleanup()
   } finally {
     cap2.restore()

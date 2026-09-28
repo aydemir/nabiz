@@ -32,7 +32,7 @@
  * --dry-run: beklemez, enjekte edilecek komutu yazıp 0 döner.
  */
 import { spawn } from "node:child_process"
-import * as fs from "node:fs"
+import { appendFileSync, closeSync, openSync, readSync, statSync } from "node:fs"
 import { wakeMessage } from "nabiz-core/bg-tasks"
 
 const args = process.argv.slice(2)
@@ -88,10 +88,18 @@ function run(file, a, timeoutMs) {
     const timer = setTimeout(() => {
       try {
         child.kill("SIGTERM")
-      } catch { /* zaten ölmüş */ }
+      } catch {
+        /* zaten ölmüş */
+      }
     }, timeoutMs)
-    if (child.stdout) child.stdout.on("data", (d) => { stdout += String(d) })
-    if (child.stderr) child.stderr.on("data", (d) => { stderr += String(d) })
+    if (child.stdout)
+      child.stdout.on("data", (d) => {
+        stdout += String(d)
+      })
+    if (child.stderr)
+      child.stderr.on("data", (d) => {
+        stderr += String(d)
+      })
     child.on("error", (e) => {
       clearTimeout(timer)
       resolve({ err: e, stdout, stderr })
@@ -99,9 +107,7 @@ function run(file, a, timeoutMs) {
     child.on("close", (code, signal) => {
       clearTimeout(timer)
       const err =
-        code === 0
-          ? null
-          : new Error(`Command failed: ${file} ${a.join(" ")} (code ${code}, signal ${signal ?? "?"})`)
+        code === 0 ? null : new Error(`Command failed: ${file} ${a.join(" ")} (code ${code}, signal ${signal ?? "?"})`)
       resolve({ err, stdout, stderr })
     })
   })
@@ -116,7 +122,9 @@ function lastState(text) {
     try {
       const j = JSON.parse(t)
       if (j && typeof j === "object" && typeof j.state === "string") return j
-    } catch { /* devam */ }
+    } catch {
+      /* devam */
+    }
   }
   return null
 }
@@ -128,16 +136,16 @@ function lastLogEvent() {
   if (!LOG) return null
   let st
   try {
-    st = fs.statSync(LOG)
+    st = statSync(LOG)
   } catch {
     return null
   }
   if (st.size === 0) return null
-  const fd = fs.openSync(LOG, "r")
+  const fd = openSync(LOG, "r")
   try {
     const start = Math.max(0, st.size - 8192)
     const buf = Buffer.alloc(Math.min(st.size, 8192))
-    fs.readSync(fd, buf, 0, buf.length, start)
+    readSync(fd, buf, 0, buf.length, start)
     const lines = buf.toString("utf8").split("\n")
     for (let i = lines.length - 1; i >= 0; i--) {
       const t = lines[i].trim()
@@ -145,22 +153,23 @@ function lastLogEvent() {
       try {
         const j = JSON.parse(t)
         if (j && typeof j.ev === "string") return j
-      } catch { /* devam */ }
+      } catch {
+        /* devam */
+      }
     }
     return null
   } finally {
-    fs.closeSync(fd)
+    closeSync(fd)
   }
 }
 
 function logAttempt(rec) {
   if (!ATTEMPT_LOG) return
   try {
-    fs.appendFileSync(
-      ATTEMPT_LOG,
-      JSON.stringify({ ts: new Date().toISOString(), task: TASK_ID || NAME, ...rec }) + "\n",
-    )
-  } catch { /* best-effort */ }
+    appendFileSync(ATTEMPT_LOG, JSON.stringify({ ts: new Date().toISOString(), task: TASK_ID || NAME, ...rec }) + "\n")
+  } catch {
+    /* best-effort */
+  }
 }
 
 async function inject(state, code) {
@@ -241,7 +250,9 @@ async function verifyLoop(state, code) {
         }
       }
     }
-  } catch { /* pre-check best-effort; adapter devam eder */ }
+  } catch {
+    /* pre-check best-effort; adapter devam eder */
+  }
   let injections = 0
   let okCount = 0
   let firstInjectTs = 0
@@ -264,12 +275,20 @@ async function verifyLoop(state, code) {
     if (turn) {
       // (5) assistant.time.created > injection_ts → wake=confirmed.
       logAttempt({
-        event: "verify", wake: "confirmed", state, code, injections,
-        injection: "ok", injection_ts: firstInjectTs,
+        event: "verify",
+        wake: "confirmed",
+        state,
+        code,
+        injections,
+        injection: "ok",
+        injection_ts: firstInjectTs,
         persistence: sightings.length >= 2 ? "ok" : "single-sighting",
-        assistant_turn_ts: msgCreated(turn), waited_verify: waited(),
+        assistant_turn_ts: msgCreated(turn),
+        waited_verify: waited(),
       })
-      console.log(`bg-wake: wake=confirmed task=${TASK_ID} injections=${injections} assistant_turn_ts=${msgCreated(turn)}`)
+      console.log(
+        `bg-wake: wake=confirmed task=${TASK_ID} injections=${injections} assistant_turn_ts=${msgCreated(turn)}`,
+      )
       return 0
     }
     const quietOver = Date.now() - lastAttemptEnd >= BACKOFF_SEC * 1000
@@ -290,8 +309,13 @@ async function verifyLoop(state, code) {
       }
       // (9) her deneme JSONL injection-attempt olarak kaydedilir.
       logAttempt({
-        event: "injection-attempt", attempt: injections, state, code,
-        state_before: "unknown", injection: r.ok ? "ok" : "failed", injection_ts: r.ts,
+        event: "injection-attempt",
+        attempt: injections,
+        state,
+        code,
+        state_before: "unknown",
+        injection: r.ok ? "ok" : "failed",
+        injection_ts: r.ts,
       })
       if (!r.ok && injections >= MAX_INJECTIONS) break
     } else {
@@ -306,9 +330,17 @@ async function verifyLoop(state, code) {
     persistence = "unknown"
   }
   logAttempt({
-    event: "verify", wake: "unknown", state, code, injections,
-    injection: okCount > 0 ? "ok" : "failed", injection_ts: firstInjectTs || null,
-    persistence, sightings: sightings.length, assistant_turn_ts: null, waited_verify: waited(),
+    event: "verify",
+    wake: "unknown",
+    state,
+    code,
+    injections,
+    injection: okCount > 0 ? "ok" : "failed",
+    injection_ts: firstInjectTs || null,
+    persistence,
+    sightings: sightings.length,
+    assistant_turn_ts: null,
+    waited_verify: waited(),
   })
   console.log(`bg-wake: wake=unknown task=${TASK_ID} injections=${injections} persistence=${persistence}`)
   return okCount > 0 || injections > 0 ? 1 : 2

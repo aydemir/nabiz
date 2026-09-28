@@ -77,8 +77,16 @@ test("PASSED: exit 0 + banner + events + log silinir", () => {
 test("FAILED: exit taşınır + log arşivlenir + banner", () => {
   const d = mktmp()
   const r = run([
-    "--name", "t2", "--event-dir", d, "--heartbeat", "0", "--",
-    NODE, "-e", "console.log('oops-error'); process.exit(3)",
+    "--name",
+    "t2",
+    "--event-dir",
+    d,
+    "--heartbeat",
+    "0",
+    "--",
+    NODE,
+    "-e",
+    "console.log('oops-error'); process.exit(3)",
   ])
   assert.equal(r.exit, 3)
   assert.ok(r.stdout.includes("<<< BUILD-MON [t2] FAILED"))
@@ -90,42 +98,45 @@ test("FAILED: exit taşınır + log arşivlenir + banner", () => {
   assert.ok(failed.log.endsWith(`/${arch}`))
 })
 
-test("TIMED_OUT: exit 124 + timed_out arşivi", () => {
-  const d = mktmp()
-  const r = run(
-    ["--name", "t7", "--event-dir", d, "--heartbeat", "0", "--timeout", "1",
-      "--", ...sleepCmd(5000)],
-    45000,
-  )
-  assert.equal(r.exit, 124)
-  assert.ok(r.stdout.includes("TIMED_OUT"))
-  assert.ok(ls(d).some((f) => /^t7\.log\.timed_out-/.test(f)))
-}, { timeout: 60000 })
+test(
+  "TIMED_OUT: exit 124 + timed_out arşivi",
+  () => {
+    const d = mktmp()
+    const r = run(
+      ["--name", "t7", "--event-dir", d, "--heartbeat", "0", "--timeout", "1", "--", ...sleepCmd(5000)],
+      45000,
+    )
+    assert.equal(r.exit, 124)
+    assert.ok(r.stdout.includes("TIMED_OUT"))
+    assert.ok(ls(d).some((f) => /^t7\.log\.timed_out-/.test(f)))
+  },
+  { timeout: 60000 },
+)
 
 // Marj notu: stall tespiti ilk poll'da olur (~2s, POLL=2 sabit);
 // 6sn uyku ~4s marj bırakır (önceki `sleep 3` yük altında flaky idi:
 // tespit poll'u proses ölümünü ıskalayabiliyordu).
-test("STALLED uyarısı sonra PASSED (ara-stall notuyla)", () => {
-  const d = mktmp()
-  const r = run(
-    ["--name", "t4", "--event-dir", d, "--heartbeat", "0", "--stall-after", "1",
-      "--", ...sleepCmd(6000)],
-    45000,
-  )
-  assert.equal(r.exit, 0)
-  const evs = events(d).map((e) => e.event)
-  assert.ok(evs.includes("STALLED"))
-  const passed = events(d).find((e) => e.event === "PASSED")
-  assert.ok(passed.detail.includes("ara stall uyarısı vardı"))
-}, { timeout: 60000 })
+test(
+  "STALLED uyarısı sonra PASSED (ara-stall notuyla)",
+  () => {
+    const d = mktmp()
+    const r = run(
+      ["--name", "t4", "--event-dir", d, "--heartbeat", "0", "--stall-after", "1", "--", ...sleepCmd(6000)],
+      45000,
+    )
+    assert.equal(r.exit, 0)
+    const evs = events(d).map((e) => e.event)
+    assert.ok(evs.includes("STALLED"))
+    const passed = events(d).find((e) => e.event === "PASSED")
+    assert.ok(passed.detail.includes("ara stall uyarısı vardı"))
+  },
+  { timeout: 60000 },
+)
 
 test("events boyut rotasyonu: arşiv + taze başlangıç", () => {
   const d = mktmp()
   writeFileSync(join(d, "events.jsonl"), "x".repeat(2000), "utf8")
-  const r = run([
-    "--name", "t3", "--event-dir", d, "--heartbeat", "0",
-    "--rotate-size", "1000", "--", ...OK,
-  ])
+  const r = run(["--name", "t3", "--event-dir", d, "--heartbeat", "0", "--rotate-size", "1000", "--", ...OK])
   assert.equal(r.exit, 0)
   assert.ok(ls(d).some((f) => /^events-\d{8}T\d{6}Z\.jsonl$/.test(f)))
   const evs = events(d).map((e) => e.event)
@@ -140,8 +151,18 @@ test("rotate-keep: eski arşivler budanır", () => {
     writeFileSync(join(d, `events-${n}Z.jsonl`), "a\n", "utf8")
   }
   const r = run([
-    "--name", "t5", "--event-dir", d, "--heartbeat", "0",
-    "--rotate-size", "1", "--rotate-keep", "2", "--", ...OK,
+    "--name",
+    "t5",
+    "--event-dir",
+    d,
+    "--heartbeat",
+    "0",
+    "--rotate-size",
+    "1",
+    "--rotate-keep",
+    "2",
+    "--",
+    ...OK,
   ])
   assert.equal(r.exit, 0)
   const arch = ls(d).filter((f) => /^events-.*\.jsonl$/.test(f))
@@ -166,59 +187,90 @@ function waitFor(cond, timeoutMs, stepMs = 100) {
   })()
 }
 
-test("--kill-on-stall: sessiz proses öldürülür, exit 111", () => {
-  const d = mktmp()
-  // 30sn uyku tespit+öldürme yolunu (~7s) her zaman hayatta atlatır;
-  // zamanlayıcı marjı ~20s, deterministik.
-  const r = run(
-    ["--name", "tk", "--event-dir", d, "--heartbeat", "0",
-      "--stall-after", "1", "--kill-on-stall", "--kill-grace", "1",
-      "--", ...sleepCmd(30000)],
-    60000,
-  )
-  assert.equal(r.exit, 111)
-  assert.ok(r.stdout.includes("<<< BUILD-MON [tk] STALLED"))
-  const stalled = events(d).filter((e) => e.event === "STALLED")
-  assert.ok(stalled.length >= 1)
-  const fatal = stalled.find((e) => e.exit === 111)
-  assert.ok(fatal, "exit=111 STALLED finali yok")
-  const status = JSON.parse(readFileSync(join(d, "tk.status.json"), "utf8"))
-  assert.equal(status.event, "STALLED")
-  assert.equal(status.exit, 111)
-  assert.ok(ls(d).some((f) => /^tk\.log\.stalled-/.test(f)))
-}, { timeout: 90000 })
+test(
+  "--kill-on-stall: sessiz proses öldürülür, exit 111",
+  () => {
+    const d = mktmp()
+    // 30sn uyku tespit+öldürme yolunu (~7s) her zaman hayatta atlatır;
+    // zamanlayıcı marjı ~20s, deterministik.
+    const r = run(
+      [
+        "--name",
+        "tk",
+        "--event-dir",
+        d,
+        "--heartbeat",
+        "0",
+        "--stall-after",
+        "1",
+        "--kill-on-stall",
+        "--kill-grace",
+        "1",
+        "--",
+        ...sleepCmd(30000),
+      ],
+      60000,
+    )
+    assert.equal(r.exit, 111)
+    assert.ok(r.stdout.includes("<<< BUILD-MON [tk] STALLED"))
+    const stalled = events(d).filter((e) => e.event === "STALLED")
+    assert.ok(stalled.length >= 1)
+    const fatal = stalled.find((e) => e.exit === 111)
+    assert.ok(fatal, "exit=111 STALLED finali yok")
+    const status = JSON.parse(readFileSync(join(d, "tk.status.json"), "utf8"))
+    assert.equal(status.event, "STALLED")
+    assert.equal(status.exit, 111)
+    assert.ok(ls(d).some((f) => /^tk\.log\.stalled-/.test(f)))
+  },
+  { timeout: 90000 },
+)
 
-test("INTERRUPTED: monitöre TERM → ağaç ölür, exit 143", async () => {
-  const d = mktmp()
-  const child = spawn(NODE,
-    [SCRIPT, "--name", "ti", "--event-dir", d, "--heartbeat", "0", "--", ...sleepCmd(30000)],
-    { cwd: ROOT })
-  let stdout = ""
-  child.stdout.on("data", (c) => { stdout += String(c) })
-  child.stderr.on("data", (c) => { stdout += String(c) })
-  const exitP = new Promise((resolve) => child.on("exit", resolve))
-  try {
-    // Monitör STARTED'ı yazıp watchdog'a girene kadar bekle (max 15s).
-    const buildPid = await waitFor(() => {
-      const m = stdout.match(/izleniyor \(pid=(\d+)\)/)
-      return m ? Number(m[1]) : null
-    }, 15000)
-    child.kill("SIGTERM")
-    const code = await Promise.race([
-      exitP,
-      new Promise((r) => setTimeout(() => r("timeout"), 20000)),
-    ])
-    assert.equal(code, 143)
-    const evs = events(d).map((e) => e.event)
-    assert.ok(evs.includes("STARTED"))
-    assert.ok(evs.includes("INTERRUPTED"))
-    assert.ok(ls(d).some((f) => /^ti\.log\.interrupted-/.test(f)))
-    // Ağaç gerçekten öldü mü (TERM yarışına karşı deadline'lı bekle).
-    await waitFor(() => {
-      try { process.kill(buildPid, 0); return false }
-      catch { return true }
-    }, 5000)
-  } finally {
-    try { child.kill("SIGKILL") } catch { /* zaten çıkmış */ }
-  }
-}, { timeout: 90000 })
+test(
+  "INTERRUPTED: monitöre TERM → ağaç ölür, exit 143",
+  async () => {
+    const d = mktmp()
+    const child = spawn(
+      NODE,
+      [SCRIPT, "--name", "ti", "--event-dir", d, "--heartbeat", "0", "--", ...sleepCmd(30000)],
+      { cwd: ROOT },
+    )
+    let stdout = ""
+    child.stdout.on("data", (c) => {
+      stdout += String(c)
+    })
+    child.stderr.on("data", (c) => {
+      stdout += String(c)
+    })
+    const exitP = new Promise((resolve) => child.on("exit", resolve))
+    try {
+      // Monitör STARTED'ı yazıp watchdog'a girene kadar bekle (max 15s).
+      const buildPid = await waitFor(() => {
+        const m = stdout.match(/izleniyor \(pid=(\d+)\)/)
+        return m ? Number(m[1]) : null
+      }, 15000)
+      child.kill("SIGTERM")
+      const code = await Promise.race([exitP, new Promise((r) => setTimeout(() => r("timeout"), 20000))])
+      assert.equal(code, 143)
+      const evs = events(d).map((e) => e.event)
+      assert.ok(evs.includes("STARTED"))
+      assert.ok(evs.includes("INTERRUPTED"))
+      assert.ok(ls(d).some((f) => /^ti\.log\.interrupted-/.test(f)))
+      // Ağaç gerçekten öldü mü (TERM yarışına karşı deadline'lı bekle).
+      await waitFor(() => {
+        try {
+          process.kill(buildPid, 0)
+          return false
+        } catch {
+          return true
+        }
+      }, 5000)
+    } finally {
+      try {
+        child.kill("SIGKILL")
+      } catch {
+        /* zaten çıkmış */
+      }
+    }
+  },
+  { timeout: 90000 },
+)

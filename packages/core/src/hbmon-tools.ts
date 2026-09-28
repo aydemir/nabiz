@@ -92,9 +92,7 @@ export function runHbmon(
         }
         const killed = !!err && (err as Error & { killed?: boolean }).killed === true
         const exitCode =
-          err && typeof (err as { code?: unknown }).code === "number"
-            ? ((err as { code: number }).code as number)
-            : 0
+          err && typeof (err as { code?: unknown }).code === "number" ? ((err as { code: number }).code as number) : 0
         resolve({
           code: exitCode,
           stdout: out,
@@ -128,7 +126,10 @@ export async function watchBuild(
   if (raw.error) return { raw, error: raw.error }
   const j = raw.json as Partial<WatchHandshake> | undefined
   if (raw.code !== 0 || !j || typeof j.uuid !== "string" || typeof j.sock !== "string") {
-    return { raw, error: `hbmon watch başarısız (exit ${raw.code}): ${(raw.stderr || raw.stdout).trim().slice(0, 300)}` }
+    return {
+      raw,
+      error: `hbmon watch başarısız (exit ${raw.code}): ${(raw.stderr || raw.stdout).trim().slice(0, 300)}`,
+    }
   }
   return { handshake: { uuid: j.uuid, sock: j.sock, log: typeof j.log === "string" ? j.log : "" }, raw }
 }

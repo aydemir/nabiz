@@ -144,7 +144,10 @@ test("scanSettled: sadece bildirilmemiş finaller", () => {
     writeStatus(d, "c", { ...HEARTBEAT, name: "c" })
     writeFileSync(join(d, "cop.status.json"), "çöp", "utf8")
     const found = scanSettled([d], 20)
-    assert.deepEqual(found.map((r) => r.name), ["a", "b"])
+    assert.deepEqual(
+      found.map((r) => r.name),
+      ["a", "b"],
+    )
     // işaretle → ikinci tara boş
     for (const r of found) markNotified(d, r)
     assert.deepEqual(scanSettled([d], 20), [])
@@ -308,9 +311,7 @@ test("scanStale: old non-final found, fresh ignored", () => {
 })
 
 test("scanStale: finals never stale (settle path owns them)", () => {
-  const dir = staleFixture([
-    { name: "fin", event: "FAILED", ts: oldTs(3600000), exit: 1 },
-  ])
+  const dir = staleFixture([{ name: "fin", event: "FAILED", ts: oldTs(3600000), exit: 1 }])
   try {
     assert.deepEqual(scanStale([dir], 1000), [])
   } finally {

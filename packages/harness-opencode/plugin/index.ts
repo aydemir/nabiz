@@ -28,14 +28,7 @@ import settleNoticer from "../plugins/opencode-settle-noticer.js"
 import truncationNoticer from "../plugins/opencode-truncation-noticer.js"
 
 // Discovery sırasıyla aynı (alfabetik): prune → noticer'lar.
-const SUB_PLUGINS = [
-  buildTracker,
-  contextSaver,
-  cpuLiveness,
-  hbmon,
-  settleNoticer,
-  truncationNoticer,
-] as const
+const SUB_PLUGINS = [buildTracker, contextSaver, cpuLiveness, hbmon, settleNoticer, truncationNoticer] as const
 
 const NS_KEYS = new Set(SUB_PLUGINS.map((s) => s.id))
 
@@ -43,10 +36,7 @@ const NS_KEYS = new Set(SUB_PLUGINS.map((s) => s.id))
  * İsim-alanlı seçenek çözümleme: paylaşılan çanta + `<plugin-id>` alt-çantası
  * (alt-çanta üstüne yazar). İsim-alanı anahtarları alt plugine sızmaz.
  */
-function scopedOptions(
-  shared: Record<string, unknown>,
-  id: string,
-): Record<string, unknown> {
+function scopedOptions(shared: Record<string, unknown>, id: string): Record<string, unknown> {
   const base = Object.fromEntries(Object.entries(shared).filter(([k]) => !NS_KEYS.has(k)))
   const sub = shared[id]
   if (sub !== null && typeof sub === "object" && !Array.isArray(sub)) {
@@ -58,7 +48,7 @@ function scopedOptions(
 export default Plugin.define({
   id: "nabiz",
   async setup(ctx) {
-    const shared = ((ctx.options ?? {}) as Record<string, unknown>) as Record<string, unknown>
+    const shared = (ctx.options ?? {}) as Record<string, unknown> as Record<string, unknown>
     if (shared.enabled === false) return
     const cleanups: Array<() => unknown> = []
     for (const sub of SUB_PLUGINS) {
@@ -72,7 +62,9 @@ export default Plugin.define({
           if (r !== undefined && typeof (r as Promise<unknown>)?.then === "function") {
             void (r as Promise<unknown>).catch(() => {})
           }
-        } catch { /* kapanışta sessiz */ }
+        } catch {
+          /* kapanışta sessiz */
+        }
       }
     }
   },

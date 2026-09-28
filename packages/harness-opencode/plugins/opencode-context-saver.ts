@@ -92,7 +92,17 @@ const DEFAULT_CONFIG: CompactConfig = {
   disableForCalls: 0,
   skipWhenContains: "#no-prune",
   skipTools: [
-    "read", "read_file", "Read", "grep", "Grep", "glob", "Glob", "list_dir", "ListDir", "search", "Search",
+    "read",
+    "read_file",
+    "Read",
+    "grep",
+    "Grep",
+    "glob",
+    "Glob",
+    "list_dir",
+    "ListDir",
+    "search",
+    "Search",
     // MCP server tools (TASK-110): nabiz server kendi kırpma/ham kararını veriyor.
     // Plugin bu tool'lara dokunmamalı — aksi halde iki kırpma katmanı üst üste biner.
     // Eşleşme `matchesSkipTools` ile suffix kuralıdır (`lib/prune.ts`): `nabiz_safe`
@@ -193,12 +203,10 @@ export default Plugin.define({
     const disclosedSessions = new Set<string>()
     // Geçici kapatma sayaçları: sessionID -> kalan ham çağrı sayısı.
     const rawCounters = new Map<string, number>()
-    let turnCallCount = 0
 
     const addLog = (entry: ToolLogEntry) => {
       logs.push(entry)
       if (logs.length > config.maxLogEntries) logs.shift()
-      turnCallCount++
     }
 
     // Bir kezlik keşif notu: kırpma hiç yaşanmasa da LLM mekanizmayı
@@ -308,15 +316,12 @@ export default Plugin.define({
       // else: küçük output'a dokunma, ham kalsın.
     })
 
-    // V1 `chat.message` → V2 `session.hook("prompt")`: prompt admission'da
-    // turn sayacını sıfırla. Sessiz mod korunur — TUI'ya yazılmaz.
-    await ctx.session.hook("prompt", () => {
-      turnCallCount = 0
-    })
+    // V1 `chat.message` → V2 `session.hook("prompt")`: boş kanca bilerek
+    // korunur — bundle sözleşmesi prompt hook'unun kayıtlı olmasını bekler.
+    await ctx.session.hook("prompt", () => {})
 
     return () => {
       logs.length = 0
-      turnCallCount = 0
       startTimes.clear()
       disclosedSessions.clear()
       rawCounters.clear()

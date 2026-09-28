@@ -15,9 +15,7 @@ import { dirname, join } from "node:path"
 
 const TESTS_DIR = fileURLToPath(new URL(".", import.meta.url))
 const ROOT = dirname(TESTS_DIR)
-const { runBash } = await import(
-  pathToFileURL(join(ROOT, "dist", "plugins", "mcp-bash-tools", "src", "exec.js")).href
-)
+const { runBash } = await import(pathToFileURL(join(ROOT, "dist", "plugins", "mcp-bash-tools", "src", "exec.js")).href)
 
 test("runBash echo: exit 0 + stdout (platform shell)", async () => {
   const r = await runBash("echo mcp-shell-ok", 15000)

@@ -109,9 +109,7 @@ export default Plugin.define({
     // V2'de tek kaynak var: ctx.options.
     const config = { ...DEFAULT_CONFIG, ...((ctx.options ?? {}) as SettleNoticeConfig) }
     const staleAfterMs =
-      typeof config.staleAfterMs === "number" &&
-      Number.isFinite(config.staleAfterMs) &&
-      config.staleAfterMs >= 0
+      typeof config.staleAfterMs === "number" && Number.isFinite(config.staleAfterMs) && config.staleAfterMs >= 0
         ? config.staleAfterMs
         : DEFAULT_STALE_AFTER_MS
     const cwd =
@@ -126,10 +124,7 @@ export default Plugin.define({
       // Dinamik ek: oturum açılışında bekleyen settlelari disclosure'a göm
       // (snapshot, salt okunur — tool-output sunum katmanını baypas eder;
       // bildirim + işaretleme after-hook'un işi, bkz TASK-123 deneyi).
-      const pending = scanSettled(
-        resolveEventDirs(config.eventDirs, process.env, cwd),
-        config.maxFiles,
-      )
+      const pending = scanSettled(resolveEventDirs(config.eventDirs, process.env, cwd), config.maxFiles)
       event.system.push({ type: "text", text: DISCLOSURE_TEXT + buildPendingSuffix(pending) })
     })
 

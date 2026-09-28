@@ -13,7 +13,7 @@
 
 import { bashSafeHandler, bashSafeSchema } from "./tools/bash_safe.js"
 import { bashRawHandler, bashRawSchema } from "./tools/bash_raw.js"
-import * as fs from "node:fs"
+import { writeSync } from "node:fs"
 
 const SERVER_INFO = {
   name: "nabiz",
@@ -65,12 +65,7 @@ function makeResponse(id: JsonRpcRequest["id"], result: unknown): JsonRpcRespons
   return { jsonrpc: "2.0", id, result }
 }
 
-function makeError(
-  id: JsonRpcRequest["id"],
-  code: number,
-  message: string,
-  data?: unknown,
-): JsonRpcResponse {
+function makeError(id: JsonRpcRequest["id"], code: number, message: string, data?: unknown): JsonRpcResponse {
   return { jsonrpc: "2.0", id, error: { code, message, data } }
 }
 
@@ -100,9 +95,7 @@ async function dispatch(req: JsonRpcRequest): Promise<JsonRpcResponse> {
     }
 
     case "tools/call": {
-      const params = req.params as
-        | { name?: string; arguments?: Record<string, unknown> }
-        | undefined
+      const params = req.params as { name?: string; arguments?: Record<string, unknown> } | undefined
       const toolName = params?.name
       const args = params?.arguments ?? {}
       const tool = TOOLS.find((t) => t.name === toolName)
@@ -131,18 +124,13 @@ async function dispatch(req: JsonRpcRequest): Promise<JsonRpcResponse> {
   }
 }
 
-async function readStdin(): Promise<string> {
-  // Streaming read — kullanılmıyor (aşağıdaki main loop streaming dispatch yapıyor).
-  return ""
-}
-
 function parseLines(input: string): string[] {
   return input.split("\n").filter((l) => l.trim().length > 0)
 }
 
 function writeLine(obj: unknown): void {
   const line = JSON.stringify(obj) + "\n"
-  fs.writeSync(1, line)
+  writeSync(1, line)
 }
 
 /**
@@ -197,9 +185,7 @@ async function main(): Promise<void> {
       try {
         req = JSON.parse(line) as JsonRpcRequest
       } catch (e) {
-        writeLine(
-          makeError(null, -32700, "Parse error", { detail: String(e) }),
-        )
+        writeLine(makeError(null, -32700, "Parse error", { detail: String(e) }))
         continue
       }
       if (req.jsonrpc !== "2.0") {
