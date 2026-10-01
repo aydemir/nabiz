@@ -4,7 +4,7 @@ title: "Windows'ta npm workspace symlink (EPERM) sorunu"
 status: done
 priority: P2
 created: 2026-09-27
-updated: 2026-09-28
+updated: 2026-10-01
 labels: [windows, npm, workspaces, build]
 depends_on: []
 ---
@@ -49,3 +49,33 @@ yeterli. Kilitli-hesap canlı EPERM kanıtı opsiyonel (NABIZ-006b P3).
 
 - Temiz Windows checkout'ta `npm install && npm run build` geçiyor.
 - Belge + gerçek davranış tutarlı (önerilen yol denenmiş).
+
+## Canlı kanıt — Windows 10 Pro (2026-10-01, bu makine)
+
+Ortam: Windows 10 Pro 2009 (Build 19045), Node v24.19.0, admin olmayan
+hesap, Geliştirici Modu kapalı.
+
+- `node scripts/check-symlink.mjs` → exit 1 + çözüm mesajı
+  (`hata: symlink yetkisi yok...`). NABIZ-006b P3 kanıtı bu makinede
+  üretildi: CI admin runner'ı bu dalı üretemiyordu, kilitli hesap üretiyor.
+- `npm run build` → temiz (core + opencode, exit 0).
+- `setup.test.mjs` → 20 pass / 1 skip (skip:
+  `planSymlinkCleanup` EPERM dalı, `tests/setup.test.mjs:176`).
+- `isOursMcpEntry` Windows yolu: `join()` backslash üretir, `endsWith`
+  ıskalar — `replaceAll("\\", "/")` ile kilitlendi
+  (`scripts/setup.mjs:65`, testler `tests/setup.test.mjs:96,118`).
+- `tree-kill.js` win32: yok-hükmündeki PID'de `taskkill` exit 128 verir
+  (`ERROR: The process "99999999" not found`), Linux ESRCH karşılığıdır.
+  Önce err'e düşüyordu (`cpu-liveness-probe.test.mjs:206` fail); 128
+  yutulunca 9/9 pass (`scripts/cpu-liveness-probe/tree-kill.js:89-99`).
+
+Kalan Windows açıkları (düzeltme yok, delil):
+
+- `bg-tasks.test.mjs` 15 pass / 5 fail / 1 skip: 1 fail `hbmon` ikilisi
+  yok (`bg-tasks.test.mjs:214`); 4 fail adapter/bg-wake exit 1≠0
+  (`:261,:429,:441,:474`) — stub spawn/pipe, Windows'ta bakılmalı.
+- `build-mon.test.mjs` 7 pass / 2 fail: `:98` `failed.log.endsWith("/arch")`
+  Windows `\` ayracında tutmaz; `:228` TERM→exit 143 sinyali Windows'ta
+  aynı değil.
+- `cpu-liveness` win32 okuyucu (`Get-Process TotalProcessorTime`) hâlâ
+  UNTESTED (`packages/core/src/cpu-liveness-disclosure.ts:33`).

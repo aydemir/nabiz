@@ -88,7 +88,15 @@ export function treeKill(pid, signal = "SIGTERM", cb) {
   try {
     if (process.platform === "win32") {
       // Windows: taskkill /T (ağaç) /F (force). /T process grubunu kapar.
-      execFileSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
+      // Yok-hükmündeki PID'de taskkill exit 128 verir ("not found") — Linux'taki
+      // ESRCH karşılığıdır, no-op başarı sayılır (Windows 10 Pro canlı kanıt:
+      // taskkill /pid 99999999 /T /F → exit 128).
+      try {
+        execFileSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
+      } catch (e) {
+        if (e && (e.status === 128 || e.code === 128)) return finish();
+        throw e;
+      }
       return finish();
     }
 

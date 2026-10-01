@@ -92,7 +92,7 @@ test("computePlan: repo'ya ait stale dosya girdileri temizlenir (V1 plugin + V2 
   assert.deepEqual(next.plugin, ["/x/baskasinin.ts"])
   assert.deepEqual(next.plugins, ["/y/baskasinin.ts", packageDirFor(ROOT)])
   // mcp zaten günceldi → sadece temizlik değişiklikleri.
-  assert.ok(next.mcp[MCP_KEY].command[1].endsWith("mcp-bash-tools/src/server.js"))
+  assert.ok(next.mcp[MCP_KEY].command[1].replaceAll("\\", "/").endsWith("mcp-bash-tools/src/server.js"))
 })
 
 test("computePlan: mcp.bash (bizim dist) → mcp.nabiz taşınır, enabled korunur", () => {
@@ -109,7 +109,7 @@ test("computePlan: mcp.bash (bizim dist) → mcp.nabiz taşınır, enabled korun
   assert.equal(dirty, true)
   assert.ok(!("bash" in next.mcp), "eski key gider")
   assert.equal(next.mcp[MCP_KEY].type, "local")
-  assert.ok(next.mcp[MCP_KEY].command[1].endsWith("mcp-bash-tools/src/server.js"))
+  assert.ok(next.mcp[MCP_KEY].command[1].replaceAll("\\", "/").endsWith("mcp-bash-tools/src/server.js"))
   assert.equal(next.mcp[MCP_KEY].enabled, false, "kullanıcı bayrağı korunur")
 })
 
@@ -154,21 +154,28 @@ test("computePlan: idempotent (uygulanmış plana ikinci pass temiz)", () => {
 })
 
 test("discoveryDirFor: config yanındaki plugins/ klasörü", () => {
-  assert.equal(discoveryDirFor("/a/b/opencode.jsonc"), "/a/b/plugins")
+  const cfg = join("a", "b", "opencode.jsonc")
+  assert.equal(discoveryDirFor(cfg), join("a", "b", "plugins"))
 })
 
 test("packageDirFor: repo plugin/ dizini", () => {
   assert.equal(packageDirFor(ROOT), join(ROOT, "plugin"))
 })
 
-test("planSymlinkCleanup: repo hedefli symlink'leri bulur, yabancı/normal dosyaya dokunmaz", () => {
+test("planSymlinkCleanup: repo hedefli symlink'leri bulur, yabancı/normal dosyaya dokunmaz", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "links-"))
   try {
     const cfg = join(dir, "opencode.jsonc")
     const ddir = discoveryDirFor(cfg)
     mkdirSync(ddir, { recursive: true })
     // Bizim symlink → listelenir.
-    symlinkSync(join(ROOT, "plugins", "opencode-hbmon.ts"), join(ddir, "opencode-hbmon.ts"))
+    try {
+      symlinkSync(join(ROOT, "plugins", "opencode-hbmon.ts"), join(ddir, "opencode-hbmon.ts"))
+    } catch (e) {
+      // Windows'ta symlink yetkisi yoksa (EPERM, Developer Mode kapalı) atla.
+      if (e?.code === "EPERM" || e?.code === "EACCES") return t.skip("symlink yetkisi yok (Windows EPERM)")
+      throw e
+    }
     // Yabancı symlink → yok sayılır (hedefi de gerçek dosya).
     writeFileSync(join(dir, "yabanci-hedef.ts"), "// yabancı")
     symlinkSync(join(dir, "yabanci-hedef.ts"), join(ddir, "opencode-context-saver.ts"))

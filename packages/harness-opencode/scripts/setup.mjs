@@ -62,7 +62,7 @@ export function isOursMcpEntry(e) {
   if (!e || typeof e !== "object") return false
   const cmd = e.command
   if (!Array.isArray(cmd)) return false
-  return cmd.some((c) => typeof c === "string" && c.endsWith("mcp-bash-tools/src/server.js"))
+  return cmd.some((c) => typeof c === "string" && c.replaceAll("\\", "/").endsWith("mcp-bash-tools/src/server.js"))
 }
 
 const PLUGIN_FILES = [
