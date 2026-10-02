@@ -1,7 +1,7 @@
 ---
 id: NABIZ-012
 title: "setup.mjs V1 MCP şekli yazıyor (mcp.<name> + enabled) — V2 mcp.servers + disabled"
-status: done
+status: done (gerekçe düzeltildi)
 priority: P2
 created: 2026-10-02
 updated: 2026-10-02
@@ -113,3 +113,55 @@ Kullanıcının **kendi** düz girdileri (`mcp.context7`, `mcp.codegraph`,
 `mcp.chrome-devtools`, eski `plugin` dizisi) taşınmadı — sunucu migration
 katmanı onları okuyor, taşımak kapsam genişletmesi olurdu. Nabız yalnız
 **kendi** girdisini normalize eder.
+
+---
+
+## GEREKÇE DÜZELTMESİ (altajan deneyi, 2026-10-02) — ÖNEMLİ
+
+Bu task "düz form **okunmuyor**" varsayımıyla açılmıştı. **Deney bunu
+çürüttü.** Kontrollü deney (canlı config'e geçici sunucular, yedekli, sonra
+geri alındı):
+
+| Deneme | Sonuç |
+|---|---|
+| `mcp.probeflat` (düz V1) | **connected** |
+| `mcp.probenested` (düz) | **connected** |
+| `mcp.servers.probev2` (iç içe) | **connected** |
+| `mcp.probeenabledfalse` (düz + `enabled:false`) | **disabled** |
+| `mcp.servers.probedisabledtrue` (iç içe + `disabled:true`) | **disabled** |
+| `mcp.probecontrol` (düz + `enabled:true`) | **connected** |
+
+**Düzeltmeler:**
+
+1. **Düz form çalışıyor.** opencode 2.0.21 `mcp.<name>` girdisini de
+   kabul ediyor/bağlanıyor. "Sunucu düz formu okumaz" **yanlıştır**.
+   Uyumluluk katmanının binary'deki **yerini bulamadım** (tek okuma yolu
+   `Object.entries(g.info.mcp?.servers ?? {})`; düz→iç içe dönüşümünü
+   içeren bir dizgi/kod bulamadım — SDK şeması da düz formu tanımıyor:
+   `Config.MCP.Info = { timeout?, servers? }`). Yani: **etki kanıtlı,
+   mekanizma bulunamadı.** Bu, "migration var" hipotezini doğrulamaz.
+2. **`enabled` de çalışıyor.** `enabled:false` sunucuyu gerçekten
+   kapatıyor. "Effect Struct decode'da sessizce atılır, `enabled:false`
+   işe yaramaz" **yanlıştır** — en azından düz formda. (İç içe form +
+   `enabled:false` denenmedi; V2 şemasında alan yok, yani orada muhtemelen
+   yutulur. Test edilmemiş bir boşluk.)
+3. Bu nedenle task'ın **gerekçesi** düzeltilmeli: yaptığımız değişiklik bir
+   **hata düzeltmesi değil, kanonikleştirme**. `setup.mjs` artık dokümana
+   uyan V2 şeklini (`mcp.servers.<name>` + `disabled`) yazıyor, V1'i de
+   okuyup aynı hedefe normalize ediyor. Faydası: (a) doküman uyumu,
+   (b) iki şekli birden taşıma ihtimali yok, (c) `enabled` gibi V2'de
+   tanımsız alanlara güvenmek gerekmiyor.
+4. Gerçek kırık **başka yerde**: `opencode-mem` ve `opencode-agent-browser`
+   her plugin yüklemesinde **"Plugin must export a default definition with
+   an id and an effect or setup function"** ile başarısız oluyor (log'da
+   133'er kez). Yani bu iki plugin **çalışmıyor** — nabız kapsamı dışı ama
+   config'de duruyor. NABIZ-014'e ayrıldı.
+
+### Metodoloji notu
+
+"Okuma yolunda düz form yok" gözlemi **yanlış negatif** verdi: gerçek okuma
+yolunu bulmuşum, ama başka bir yerden normalize edilmiş veri geldiğini
+düşünmemiştim. Düz-okuma yolu bulmak, formun **okunmadığı** anlamına
+gelmez — **etki deneyiyle** sınanmalıydı. Aynı hata namespace'de de vardı
+(`{1,128}` ≠ `{1,64}`): binary'de bir dize bulmak, o dizenin **hangi
+değere uygulandığını** kanıtlamaz.

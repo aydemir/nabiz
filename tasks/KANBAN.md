@@ -26,6 +26,7 @@ katmanıdır.
 | NABIZ-011 | `namespace: "build pulse"` geçersiz → 7 tool sessizce kayıt dışı | done (`build_pulse` + host-kuralı kilidi, 7/7 canlı) | P1 |
 | NABIZ-012 | setup.mjs V1 MCP şekli yazıyor (`mcp.<name>` + `enabled`) | done (`mcp.servers` + `disabled`, V1 okuma/idempotans) | P2 |
 | NABIZ-013 | stale `dist/` → plugin tamamen yüklenemiyor (altajan bulgusu) | todo (önce ölç) | P2 |
+| NABIZ-014 | config'deki `opencode-mem` + `opencode-agent-browser` yüklenemiyor (V1UAE, 133× log) | todo | P2 |
 
 Sıra: `NABIZ-001 → NABIZ-002 → NABIZ-003` (003, 001'e bağlı; 001-002 bağımsız,
 paralel yapılabilir). `NABIZ-004 ↔ NABIZ-005` bağımsız, paralel yapılabilir;
@@ -67,6 +68,35 @@ bulgu → **NABIZ-013** (stale `dist` tüm plugin'i düşürüyor).
 Altajandan gelen metodoloji notu: **kendi grep desenin log'a düşmesi**
 sahte pozitif üretiyor (`spawning process` satırı). Doğrulama log'dan
 kanıt alırken dosyanın byte offset'ini alıp yalnız sonrasını oku.
+
+### İkinci dalga (aynı gün, kontrollü deney) — iki iddia ÇÜRÜTÜLDÜ
+
+Raporda INCONCLUSIVE kalan nokta, yedekli canlı deneyle çözüldü:
+
+| Deneme | Sonuç |
+|---|---|
+| düz `mcp.<name>` (V1) | **connected** |
+| iç içe `mcp.servers.<name>` | **connected** |
+| düz + `enabled:false` | **disabled** (çalışıyor) |
+| iç içe + `disabled:true` | **disabled** |
+| düz + `enabled:true` | connected |
+
+- **"Sunucu düz formu okumaz" YANLIŞ.** Düz form çalışıyor. Uyumluluk
+  katmanının binary'deki yeri **bulunamadı** — etki kanıtlı, mekanizma
+  değil. NABIZ-012'nin gerekçesi düzeltildi: yaptığımız bir hata düzeltmesi
+  değil, **kanonikleştirme**.
+- **"`enabled` sessizce atılır, `enabled:false` işe yaramaz" YANLIŞ.**
+  Düz formda gerçekten kapatıyor. (İç içe form + `enabled:false`
+  denenmedi — boşluk olarak not edildi.)
+- Rapordan çıkan **gerçek** yeni bulgu → **NABIZ-014**: config'deki
+  `opencode-mem` ve `opencode-agent-browser` **yüklenemiyor** (V1UAE,
+  133'er kez). Kullanıcı iki plugin'i aktif sanıyor, hiçbiri çalışmıyor.
+
+**Ders (iki kez aynı hataya düştük):** binary'de bir dize ya da tek bir
+okuma yolu bulmak, o kuralın **hangi değere uygulandığını** kanıtlamaz.
+Namespace'de `{1,128}` bulup `{1,64}` gerçeğini kaçırdık; MCP'de düz-okuma
+yolu bulup "okunmuyor" dedik. **Etki deneyi (ölçüm) son sözü söyler;
+istatistiksel kanıt değil.**
 
 ## 2. Göz Yeniden Değerlendirme (2026-09-27)
 
