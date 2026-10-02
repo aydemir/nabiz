@@ -106,6 +106,12 @@ npm test --workspace nabiz-opencode        # node --test suite
 node packages/harness-opencode/scripts/setup.mjs --check
 ```
 
+`packages/core/src` değiştiyse **önce `npm run build`**: V2 plugin `.ts`
+kaynaktan yüklenir ama `nabiz-core` import'ları `dist/`'ten çözülür; bayat
+dist tüm plugin'i düşürür (NABIZ-013). Bekçi:
+`node packages/harness-opencode/scripts/check-dist.mjs` (bayatsa exit 1;
+`setup.mjs --check/--yes` de aynı kapıdan geçmez).
+
 Windows notu: `npm install` workspace linklerini symlink ile kurar
 (`node_modules/nabiz-core` → `packages/core`). EPERM/symlink hatası
 alırsan terminali yönetici olarak çalıştır ya da Geliştirici Modu'nu aç
@@ -122,7 +128,7 @@ symlink kuramıyorsa EPERM'i anlaşılır mesajla yakalar).
   (not a plugin itself) and `mcp-bash-tools/`
 - `plugin/` — the installable V2 package (single entrypoint `index.ts`,
   id `nabiz`; config `plugins` entry points here)
-- `scripts/` — `setup.mjs`, `build-mon.mjs`, `hbmon-build-mon.mjs`,
+- `scripts/` — `setup.mjs`, `check-dist.mjs`, `build-mon.mjs`, `hbmon-build-mon.mjs`,
   `bg-wake.mjs`, `cpu-liveness-probe/`, `timeout-kill-probe/`
 - `tests/` — `node --test` suite (mirrors the opencode-plugins history,
   now running against `nabiz-core`)

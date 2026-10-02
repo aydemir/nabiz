@@ -1,7 +1,7 @@
 ---
 id: NABIZ-014
 title: "config'deki opencode-mem + opencode-agent-browser plugin'leri yüklenemiyor"
-status: todo
+status: done
 priority: P2
 created: 2026-10-02
 updated: 2026-10-02
@@ -63,3 +63,16 @@ sessizce**. Nabız'ın kendi `plugin` + `plugins` girdileri sağlam.
 - `failed to load plugin` log'da **0** (nabız + diğerleri).
 - Ya iki plugin gerçekten yükleniyor (etkileri görünür), ya config'de yok.
 - `setup.mjs --check` hâlâ temiz (nabız girdisi değişmedi).
+
+## Çözüm (2026-10-02, uygulandı)
+
+- `opencode-agent-browser`: registry'de yalnız 1.0.0 var (V2 yok) → config
+  `plugin` dizisinden + `package.json` deps'ten çıkarıldı. Hiçbir zaman
+  tool sağlamamıştı.
+- `opencode-mem`: `opencode plugin update` → 2.27.1. Loader WARN
+  ("default ... effect or setup") sürüyor (`{id, server}` şekli) ama
+  `memory` tool'u kaydolup ÇALIŞIYOR (`memory help` → success). WARN
+  kozmetik; tool kaybı yok. Kanıt: config'den çıkarınca katalogdan düştü,
+  geri ekleyince dönüp `help` çalıştı.
+- `@opencode-ai/plugin: 1.17.3` pin'i bırakıldı (mem 2.x ona import ediyor).
+- Yedek: `AppData/Local/Temp/opencode/cfg-014-bak/`.

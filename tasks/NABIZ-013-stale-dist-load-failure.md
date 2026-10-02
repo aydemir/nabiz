@@ -1,7 +1,7 @@
 ---
 id: NABIZ-013
 title: "stale dist → plugin tamamen yüklenemiyor (SyntaxError: Export named … not found)"
-status: todo
+status: done
 priority: P2
 created: 2026-10-02
 updated: 2026-10-02

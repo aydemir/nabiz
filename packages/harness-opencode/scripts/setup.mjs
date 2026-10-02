@@ -53,6 +53,7 @@ import {
 import { basename, dirname, isAbsolute, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { homedir } from "node:os"
+import { checkDist } from "./check-dist.mjs"
 
 const USAGE = `scripts/setup.mjs — tamset kurulum (repo → canlı opencode config).
 Kullanım:
@@ -394,6 +395,15 @@ export async function run(argv, deps = {}) {
   const repo = checkRepo(root)
   if (!repo.ok) {
     err(`eksik artifact/dosya:\n  - ${repo.missing.join("\n  - ")}\nönce çalıştır: npm run build`)
+    return 1
+  }
+
+  // NABIZ-013: varolan ama BAYAT dist de plugin'i tümden düşürür
+  // (host .ts'i kaynaktan, nabiz-core'u dist'ten çözer). Kaynak yoksa
+  // (paketli kurulum) karar verilemez, sessiz geçilir.
+  const dist = checkDist(join(root, "..", "core", "src"), join(root, "..", "core", "dist"))
+  if (!dist.ok) {
+    err(`hata: ${dist.reason}`)
     return 1
   }
 
