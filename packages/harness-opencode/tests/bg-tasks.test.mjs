@@ -25,6 +25,7 @@ import {
   readOutTail,
   readRecord,
   resolveRecord,
+  shellArgv,
   wakeMessage,
   writeRecord,
 } from "nabiz-core/bg-tasks"
@@ -32,6 +33,38 @@ import hbmonFactory from "../dist/plugins/opencode-hbmon.js"
 import { setupV2, textOf } from "./v2-harness.mjs"
 
 const LIVE = !!process.env.HBMON_LIVE
+const WIN = process.platform === "win32"
+
+/**
+ * Platform-nötr çalıştırılabilir stub: Node CreateProcess üzerinden
+ * extensionless+shebang dosyayı koşturamaz (ENOENT). Aynı JS gövde
+ * `name.js` dosyasına yazılır; POSIX'te extensionless+shebang dosya,
+ * win32'de node'a delege eden `name.cmd` wrapper döner (PATH'teki çıplak
+ * `name` PATHEXT ile .cmd'yi bulur; bg-wake ComSpec düşüşüyle koşar).
+ * Üretim kodu değişmez — sadece test kablolaması.
+ */
+function writeNodeShim(dir, name, jsBody) {
+  const js = join(dir, `${name}.js`)
+  writeFileSync(js, jsBody)
+  if (!WIN) {
+    const sh = join(dir, name)
+    writeFileSync(sh, `#!/usr/bin/env node\n${jsBody}`)
+    chmodSync(sh, 0o755)
+    return sh
+  }
+  const cmd = join(dir, `${name}.cmd`)
+  writeFileSync(cmd, `@"${process.execPath}" "${js}" %*\r\n`)
+  return cmd
+}
+
+test("shellArgv: komut sarmalayıcı platforma göre seçilir", () => {
+  assert.deepEqual(shellArgv("echo hi", "linux"), ["/bin/bash", "-c", "echo hi"])
+  assert.deepEqual(shellArgv("echo hi", "darwin"), ["/bin/bash", "-c", "echo hi"])
+  const w = shellArgv("echo hi", "win32")
+  assert.equal(w[0], process.env.ComSpec ?? "cmd.exe")
+  assert.deepEqual(w.slice(1), ["/d", "/c", "echo hi"])
+  assert.deepEqual(shellArgv("x"), shellArgv("x", process.platform))
+})
 
 function rec(over = {}) {
   return {
@@ -214,19 +247,22 @@ test("readLastEvent: jsonl kuyruğundan terminal olay (daemon-ölü fallback)", 
 test("bg_run: bekçi NABIZ_WAKE_NODE runtime ile spawn edilir (V2 execPath=opencode)", async () => {
   // Canlı kanıt 2026-09-25: process.execPath V2'de opencode binary'sidir;
   // bekçi "Unrecognized flag: --sock in command opencode" diye ölmüştü.
-  // Sahte hbmon (watch handshake) + NABIZ_WAKE_NODE=/bin/echo ile spawn
-  // satırı wake log'a düşmeli (--session ses_t görünür).
+  // Sahte hbmon (watch handshake) + echo-argv runtime ile spawn satırı
+  // wake log'a düşmeli (--session ses_t görünür). win32'de bash yok:
+  // shim'ler writeNodeShim ile node gövdesi + .cmd wrapper olur.
   const dir = mkdtempSync(join(tmpdir(), "bg-"))
   const prevDir = process.env.HBMON_BG_DIR
   const prevNode = process.env.NABIZ_WAKE_NODE
-  const shim = join(dir, "hbmon")
-  writeFileSync(
-    shim,
-    `#!/usr/bin/env bash\nif [ "$1" = "watch" ]; then echo '{"v":1,"ev":"ready","uuid":"wake1","sock":"${dir}/t.sock","log":"${dir}/t.jsonl"}'; exit 0; fi\nexit 0\n`,
+  const handshake = { v: 1, ev: "ready", uuid: "wake1", sock: join(dir, "t.sock"), log: join(dir, "t.jsonl") }
+  const shim = writeNodeShim(
+    dir,
+    "hbmon",
+    `if (process.argv[2] === "watch") console.log(${JSON.stringify(JSON.stringify(handshake))});\nprocess.exit(0)\n`,
   )
-  chmodSync(shim, 0o755)
   process.env.HBMON_BG_DIR = dir
-  process.env.NABIZ_WAKE_NODE = "/bin/echo"
+  process.env.NABIZ_WAKE_NODE = WIN
+    ? writeNodeShim(dir, "wakenode", `process.stdout.write(process.argv.slice(2).join(" "))\n`)
+    : "/bin/echo"
   try {
     const { addedTools } = await setupV2(hbmonFactory, { bin: shim })
     const bgRun = addedTools.find((t) => t.name === "bg_run")
@@ -234,7 +270,8 @@ test("bg_run: bekçi NABIZ_WAKE_NODE runtime ile spawn edilir (V2 execPath=openc
     assert.match(textOf(res.content), /Uyandırma kuruldu/)
     const wakeLog = join(dir, "bg-wake1.wake.log")
     let body = ""
-    for (let i = 0; i < 40 && !body.includes("--session ses_t"); i++) {
+    // win32'de node+cmd zinciri yavaş açılır (marj 6sn; erken çıkılır).
+    for (let i = 0; i < 120 && !body.includes("--session ses_t"); i++) {
       await new Promise((r) => setTimeout(r, 50))
       try {
         body = readFileSync(wakeLog, "utf8")
@@ -262,9 +299,11 @@ test("bg-wake: üretim enjeksiyon metni wakeMessage ile birebir (NABIZ-010)", as
   const { execFile } = await import("node:child_process")
   const dir = mkdtempSync(join(tmpdir(), "bg-"))
   // Sahte `opencode`: enjeksiyon metnini (son arg) dosyaya yazar, 0 döner.
-  const stub = join(dir, "opencode")
-  writeFileSync(stub, '#!/bin/sh\nlast=""; for a in "$@"; do last="$a"; done\nprintf \'%s\' "$last" > "$MSG"\nexit 0\n')
-  chmodSync(stub, 0o755)
+  const stub = writeNodeShim(
+    dir,
+    "opencode",
+    `const fs = require("fs");\nfs.writeFileSync(process.env.MSG, process.argv[process.argv.length - 1]);\nprocess.exit(0)\n`,
+  )
   const runWake = (logLine, tag) =>
     new Promise((resolve) => {
       const log = join(dir, `${tag}.jsonl`)
@@ -283,7 +322,7 @@ test("bg-wake: üretim enjeksiyon metni wakeMessage ile birebir (NABIZ-010)", as
           "--name",
           "derle",
         ],
-        { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, MSG: msgFile } },
+        { encoding: "utf8", env: { ...process.env, OPENCODE_BIN: stub, MSG: msgFile } },
         (err, stdout) => resolve({ code: err?.code ?? 0, stdout: String(stdout), msgFile }),
       )
     })
@@ -340,9 +379,7 @@ async function makeFakeOpencode(mode, seed) {
   const dir = mkdtempSync(join(tmpdir(), "bgw-"))
   const statePath = join(dir, "state.json")
   writeFileSync(statePath, JSON.stringify(seed ?? { runs: 0, messages: [] }))
-  const stub = join(dir, "opencode")
-  const code = `#!/usr/bin/env node
-const fs = require("fs");
+  const code = `const fs = require("fs");
 const STATE = ${JSON.stringify(statePath)};
 const MODE = ${JSON.stringify(mode)};
 const a = process.argv.slice(2);
@@ -370,8 +407,7 @@ if (cmd === "session" && a[1] === "export") {
 }
 process.exit(2);
 `
-  writeFileSync(stub, code)
-  chmodSync(stub, 0o755)
+  const stub = writeNodeShim(dir, "opencode", code)
   // Process-wait fazını atlamak için terminal olay önceden yazılır.
   const sockBase = join(dir, "t")
   writeFileSync(sockBase + ".jsonl", JSON.stringify({ ev: "exit", state: "done", code: 0 }) + "\n")
@@ -407,7 +443,10 @@ async function runWake(dir, sockBase, taskId, extra = []) {
         "--attempt-log",
         join(dir, "attempts.jsonl"),
       ],
-      { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}` } },
+      {
+        encoding: "utf8",
+        env: { ...process.env, OPENCODE_BIN: join(dir, WIN ? "opencode.cmd" : "opencode") },
+      },
       (err, stdout, stderr) => resolve({ code: err?.code ?? 0, stdout: String(stdout), stderr: String(stderr) }),
     )
   })

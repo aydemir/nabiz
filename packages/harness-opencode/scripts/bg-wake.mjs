@@ -45,6 +45,10 @@ const SOCK = get("--sock", "")
 const NAME = get("--name", "bg")
 const LOG = get("--log", SOCK.endsWith(".sock") ? SOCK.slice(0, -5) + ".jsonl" : "")
 const BIN = get("--bin", process.env.HBMON_BIN || "hbmon")
+// Enjeksiyon/doğrulama ikiliği: HBMON_BIN karşılığı (test shim'i veya özel
+// kurulum yolu; boşsa PATH'teki `opencode`). win32'de .cmd değeri run()
+// içindeki ComSpec düşüşüyle koşar.
+const OPENCODE_BIN = get("--opencode-bin", process.env.OPENCODE_BIN || "opencode")
 const WAIT_SEC = Number(get("--wait-sec", "30"))
 const MAX_WAIT_SEC = Number(get("--max-wait-sec", "14400"))
 const DRY = args.includes("--dry-run")
@@ -76,40 +80,65 @@ function run(file, a, timeoutMs) {
     // açık stdin borusunda SONSUZA dek asılır (canlı kanıt 2026-09-25).
     // spawn stdio dizisini harfiyen uygular: stdin /dev/null (anında EOF),
     // stdout/stderr pipe (çıktı parse ediliyor).
-    let child
-    try {
-      child = spawn(file, a, { stdio: ["ignore", "pipe", "pipe"] })
-    } catch (e) {
-      resolve({ err: e, stdout: "", stderr: String(e?.message ?? e) })
-      return
-    }
+    //
+    // win32 düşüşü: CreateProcess .cmd/.bat'yi doğrudan koşturamaz
+    // (runHbmon'daki kuralın aynısı). İlk deneme PATH çözümlemesine
+    // bırakılır (gerçek opencode.exe etkilenmez); koşturulamazsa TEK kez
+    // ComSpec `/d /c` ile denenir, o da olmazsa ilk hata değil SON hata
+    // döner. POSIX'te retry kolu hiç koşmaz (gate'li).
+    let child = null
     let stdout = ""
     let stderr = ""
-    const timer = setTimeout(() => {
-      try {
-        child.kill("SIGTERM")
-      } catch {
-        /* zaten ölmüş */
-      }
-    }, timeoutMs)
-    if (child.stdout)
-      child.stdout.on("data", (d) => {
-        stdout += String(d)
-      })
-    if (child.stderr)
-      child.stderr.on("data", (d) => {
-        stderr += String(d)
-      })
-    child.on("error", (e) => {
-      clearTimeout(timer)
-      resolve({ err: e, stdout, stderr })
-    })
-    child.on("close", (code, signal) => {
-      clearTimeout(timer)
-      const err =
-        code === 0 ? null : new Error(`Command failed: ${file} ${a.join(" ")} (code ${code}, signal ${signal ?? "?"})`)
+    let timer = null
+    const settle = (err) => {
+      if (timer) clearTimeout(timer)
       resolve({ err, stdout, stderr })
-    })
+    }
+    const launch = (f, argv, retried) => {
+      const unexecutable = (e) => !!e && (e.code === "ENOENT" || e.code === "EINVAL" || e.code === "UNKNOWN")
+      const fallback = () => launch(process.env.ComSpec ?? "cmd.exe", ["/d", "/c", file, ...a], true)
+      try {
+        child = spawn(f, argv, { stdio: ["ignore", "pipe", "pipe"] })
+      } catch (e) {
+        stderr = String(e?.message ?? e)
+        if (!retried && process.platform === "win32" && unexecutable(e)) {
+          fallback()
+          return
+        }
+        settle(e)
+        return
+      }
+      timer = setTimeout(() => {
+        try {
+          child.kill("SIGTERM")
+        } catch {
+          /* zaten ölmüş */
+        }
+      }, timeoutMs)
+      if (child.stdout)
+        child.stdout.on("data", (d) => {
+          stdout += String(d)
+        })
+      if (child.stderr)
+        child.stderr.on("data", (d) => {
+          stderr += String(d)
+        })
+      child.on("error", (e) => {
+        if (timer) clearTimeout(timer)
+        if (!retried && process.platform === "win32" && unexecutable(e)) {
+          fallback()
+          return
+        }
+        settle(e)
+      })
+      child.on("close", (code, signal) => {
+        if (timer) clearTimeout(timer)
+        const err =
+          code === 0 ? null : new Error(`Command failed: ${file} ${a.join(" ")} (code ${code}, signal ${signal ?? "?"})`)
+        settle(err)
+      })
+    }
+    launch(file, a, false)
   })
 }
 
@@ -176,7 +205,7 @@ async function inject(state, code) {
   const base = wakeMessage(NAME, state, code ?? undefined)
   const msg = MARKER ? `${base} ${MARKER}` : base
   const injection_ts = Date.now()
-  const d = await run("opencode", ["run", "-s", SESSION, msg], 180000)
+  const d = await run(OPENCODE_BIN, ["run", "-s", SESSION, msg], 180000)
   if (d.err) {
     console.error(`bg-wake: enjeksiyon başarısız: ${d.err.message ?? d.err} | stderr: ${d.stderr.slice(0, 300)}`)
     return { ok: false, ts: injection_ts }
@@ -189,7 +218,7 @@ async function inject(state, code) {
  *  (status endpoint keşfi zorunlu bağımlılık değildir).
  *  V2 notu: `opencode export` V1 komutuydu; 2.x'te `session export` altında. */
 async function readExport() {
-  const d = await run("opencode", ["session", "export", SESSION], 60000)
+  const d = await run(OPENCODE_BIN, ["session", "export", SESSION], 60000)
   if (d.err) return { ok: false, error: String(d.err.message ?? d.err) }
   try {
     const j = JSON.parse(d.stdout)

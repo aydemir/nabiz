@@ -22,7 +22,7 @@ import { execFileSync, spawn } from "node:child_process"
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { fileURLToPath } from "node:url"
-import { join, dirname } from "node:path"
+import { join, dirname, basename } from "node:path"
 
 const SCRIPT = fileURLToPath(new URL("../scripts/build-mon.mjs", import.meta.url))
 const ROOT = dirname(dirname(fileURLToPath(new URL(".", import.meta.url))))
@@ -95,7 +95,9 @@ test("FAILED: exit taşınır + log arşivlenir + banner", () => {
   assert.ok(readFileSync(join(d, arch), "utf8").includes("oops-error"))
   const failed = events(d).find((e) => e.event === "FAILED")
   assert.equal(failed.exit, 3)
-  assert.ok(failed.log.endsWith(`/${arch}`))
+  // Olaydaki log mutlak yoldur; ayraç platforma göre değişir (`\` vs
+  // `/`) — dosya adı karşılaştırılır (iki OS'te de aynı).
+  assert.equal(basename(failed.log), arch)
 })
 
 test(
@@ -242,33 +244,60 @@ test(
       stdout += String(c)
     })
     const exitP = new Promise((resolve) => child.on("exit", resolve))
+    // win32'de sinyal İLETİLEMEZ: kill() TerminateProcess yapar, handler
+    // koşmaz (ölçüldü: exit code=null/signal=SIGTERM). Yani 143 + INTERRUPTED
+    // olayı POSIX'e özgüdür; win32 kolu bu sınırı kilitler, yetim kalan
+    // derleme ağacı taskkill ile toplanır.
+    const WIN = process.platform === "win32"
+    let buildPid = null
     try {
       // Monitör STARTED'ı yazıp watchdog'a girene kadar bekle (max 15s).
-      const buildPid = await waitFor(() => {
+      buildPid = await waitFor(() => {
         const m = stdout.match(/izleniyor \(pid=(\d+)\)/)
         return m ? Number(m[1]) : null
       }, 15000)
       child.kill("SIGTERM")
       const code = await Promise.race([exitP, new Promise((r) => setTimeout(() => r("timeout"), 20000))])
-      assert.equal(code, 143)
       const evs = events(d).map((e) => e.event)
       assert.ok(evs.includes("STARTED"))
-      assert.ok(evs.includes("INTERRUPTED"))
-      assert.ok(ls(d).some((f) => /^ti\.log\.interrupted-/.test(f)))
-      // Ağaç gerçekten öldü mü (TERM yarışına karşı deadline'lı bekle).
-      await waitFor(() => {
-        try {
-          process.kill(buildPid, 0)
-          return false
-        } catch {
-          return true
-        }
-      }, 5000)
+      if (WIN) {
+        assert.notEqual(code, 143)
+        assert.ok(!evs.includes("INTERRUPTED"))
+      } else {
+        assert.equal(code, 143)
+        assert.ok(evs.includes("INTERRUPTED"))
+        assert.ok(ls(d).some((f) => /^ti\.log\.interrupted-/.test(f)))
+        // Ağaç gerçekten öldü mü (TERM yarışına karşı deadline'lı bekle).
+        await waitFor(() => {
+          try {
+            process.kill(buildPid, 0)
+            return false
+          } catch {
+            return true
+          }
+        }, 5000)
+      }
     } finally {
       try {
         child.kill("SIGKILL")
       } catch {
         /* zaten çıkmış */
+      }
+      if (WIN && buildPid !== null) {
+        // detached yetim win32'de yaşar — ağaçça öldür, ölümünü bekle.
+        try {
+          execFileSync("taskkill", ["/PID", String(buildPid), "/T", "/F"], { stdio: "ignore" })
+        } catch {
+          /* zaten ölmüş */
+        }
+        await waitFor(() => {
+          try {
+            process.kill(buildPid, 0)
+            return false
+          } catch {
+            return true
+          }
+        }, 10000)
       }
     }
   },

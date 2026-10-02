@@ -41,6 +41,21 @@ export function bgDir(env: NodeJS.ProcessEnv = process.env): string {
   return direct === "" ? tmpdir() : direct
 }
 
+/**
+ * bg_run komut sarmalayıcı: shell metnini argv'ye çevirir (hbmon
+ * shell'siz spawn eder — argv dizisi ister).
+ *
+ * POSIX: `/bin/bash -c` (dash timeout'ta torun orphan bırakır —
+ * mcp-bash-tools/exec.ts ile aynı karar). win32: ComSpec `/d /c`
+ * (`/bin/bash` ENOENT verir; POSIX sözdizimi çalışmaz, bilinçli sınır).
+ * platform parametresi test kilidi içindir (CI ubuntu+windows'ta iki kol
+ * da koşar).
+ */
+export function shellArgv(command: string, platform: string = process.platform): string[] {
+  if (platform === "win32") return [process.env.ComSpec ?? "cmd.exe", "/d", "/c", command]
+  return ["/bin/bash", "-c", command]
+}
+
 export function sidecarPath(dir: string, uuid: string): string {
   return join(dir, `bg-${uuid}.json`)
 }

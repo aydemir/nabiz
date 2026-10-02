@@ -42,6 +42,7 @@ import {
   readOutCursor,
   readOutTail,
   resolveRecord,
+  shellArgv,
   writeRecord,
 } from "nabiz-core/bg-tasks"
 import { formatProgress, readLastProgress } from "nabiz-core/progress"
@@ -269,7 +270,7 @@ export default Plugin.define({
             return { content: "bg_run HATA: `name` /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/ uymalı" }
           }
           const notify = args.notify ?? true
-          const w = await watchBuild(bin, ["/bin/bash", "-c", args.command], {
+          const w = await watchBuild(bin, shellArgv(args.command), {
             timeoutSec: args.timeout_sec,
             label: args.name,
           })
@@ -298,11 +299,24 @@ export default Plugin.define({
             try {
               const wakeLog = join(dir, `bg-${h.uuid}.wake.log`)
               const outFd = openSync(wakeLog, "a")
-              const child = spawn(
-                resolveWakeNodeBin(),
-                [wake, "--session", sessionID, "--sock", h.sock, "--log", h.log, "--name", args.name],
-                { detached: true, stdio: ["ignore", outFd, outFd] },
-              )
+              // win32 .cmd kuralı (runHbmon ile aynı: yalnızca test
+              // shim'leri; gerçek runtime her zaman node .exe — Node .cmd'yi
+              // doğrudan spawn edemez, ComSpec DOĞRUDAN spawn edilir).
+              let wakeBin = resolveWakeNodeBin()
+              let wakeArgs = [wake, "--session", sessionID, "--sock", h.sock, "--log", h.log, "--name", args.name]
+              if (process.platform === "win32" && /\.(cmd|bat)$/i.test(wakeBin)) {
+                wakeArgs = ["/d", "/c", wakeBin, ...wakeArgs]
+                wakeBin = process.env.ComSpec ?? "cmd.exe"
+              }
+              const child = spawn(wakeBin, wakeArgs, {
+                // win32: detached dosya-fd çıktıyı yutar (boş log, ölçüldü) —
+                // Windows çocuğu zaten ebeveynden bağımsız yaşatır, detached
+                // gerekmez. windowsHide konsol parlamasını önler (POSIX'te
+                // yoksayılır).
+                detached: process.platform !== "win32",
+                stdio: ["ignore", outFd, outFd],
+                windowsHide: true,
+              })
               child.unref()
               closeSync(outFd)
               lines.push(`Uyandırma kuruldu: bitince bu oturumda yeni turn açılır.`)
