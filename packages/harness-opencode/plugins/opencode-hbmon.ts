@@ -181,7 +181,7 @@ export default Plugin.define({
           },
           ["command"],
         ),
-        options: { namespace: "build pulse" },
+        options: { namespace: "build_pulse" },
         async execute(input) {
           const args = input as { command: string[]; uuid?: string; timeout_sec?: number }
           const w = await watchBuild(bin, args.command, {
@@ -214,7 +214,7 @@ export default Plugin.define({
           },
           ["sock"],
         ),
-        options: { namespace: "build pulse" },
+        options: { namespace: "build_pulse" },
         async execute(input, context) {
           const args = input as { sock: string; timeout?: number; until?: string }
           const signal = (context as ToolContext | undefined)?.signal
@@ -240,7 +240,7 @@ export default Plugin.define({
         description:
           "Sock'lu build'in anlık özeti (ağaç+metrik+sağlık). Hızlı yoklama, beklemez. hbmon_wait `woke_on=... state=running/stalled` dönerse detaya bununla bak.",
         input: obj({ sock: str("hbmon_watch'tan dönen sock") }, ["sock"]),
-        options: { namespace: "build pulse" },
+        options: { namespace: "build_pulse" },
         async execute(input, context) {
           const args = input as { sock: string }
           const signal = (context as ToolContext | undefined)?.signal
@@ -263,7 +263,7 @@ export default Plugin.define({
           },
           ["name", "command"],
         ),
-        options: { namespace: "build pulse" },
+        options: { namespace: "build_pulse" },
         async execute(input, context) {
           const args = input as { name: string; command: string; notify?: boolean; timeout_sec?: number }
           if (!NAME_RE.test(args.name)) {
@@ -337,7 +337,7 @@ export default Plugin.define({
         name: "bg_status",
         description: "Arka plan görevinin anlık özeti (compact). Beklemez. id: name veya uuid-prefix.",
         input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
-        options: { namespace: "build pulse" },
+        options: { namespace: "build_pulse" },
         async execute(input, context) {
           const args = input as { id: string }
           const r = resolveRecord(bgDir(), args.id)
@@ -378,7 +378,7 @@ export default Plugin.define({
           },
           ["id"],
         ),
-        options: { namespace: "build pulse" },
+        options: { namespace: "build_pulse" },
         async execute(input) {
           const args = input as { id: string; tail_bytes?: number; offset?: number }
           const r = resolveRecord(bgDir(), args.id)
@@ -399,7 +399,7 @@ export default Plugin.define({
         name: "bg_kill",
         description: "Arka plan görevini öldür (process group, TERM). id: name veya uuid-prefix.",
         input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
-        options: { namespace: "build pulse" },
+        options: { namespace: "build_pulse" },
         async execute(input) {
           const args = input as { id: string }
           const r = resolveRecord(bgDir(), args.id)

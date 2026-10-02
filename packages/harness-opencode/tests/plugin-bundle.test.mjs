@@ -35,6 +35,29 @@ test("bundle: tüm hook'lar + 7 hbmon tool'u kaydolur", async () => {
   }
 })
 
+test("bundle: namespace host kuralına uyar (NABIZ-011 — sessiz kayıt düşürme)", async () => {
+  // opencode namespace'i `^[A-Za-z0-9_-]{1,128}$` ile doğruluyor ve
+  // UYMUYAN tool'u `tools/list`'te hiç göstermeden düşürüyor ("Skipping
+  // invalid tool registration", canlı kanıt 2026-10-02, opencode 2.0.21).
+  // @opencode/plugin yalnız tip taşıdığı için `tsc` bu hatayı geçirir —
+  // kuralı burada kilitliyoruz.
+  const HOST_RULE = /^[A-Za-z0-9_-]{1,128}$/
+  const { addedTools, cleanup } = await setupV2(bundle, {})
+  try {
+    const namespaced = addedTools.filter((t) => t.options?.namespace !== undefined)
+    assert.ok(namespaced.length > 0, "namespace kullanan tool yok — kilit boşa düşmesin")
+    for (const t of namespaced) {
+      assert.match(
+        t.options.namespace,
+        HOST_RULE,
+        `${t.name} namespace '${t.options.namespace}' host kuralına uymuyor (tool sessizce düşer)`,
+      )
+    }
+  } finally {
+    await cleanup?.()
+  }
+})
+
 test("bundle: disclosure'lar tek context hook'unda birleşir", async () => {
   const { sessionHooks, cleanup } = await setupV2(bundle, {})
   try {

@@ -50,7 +50,10 @@ Yedi tool da promise yüzeyinde `ToolContext`
 (kilit: `tests/tool-context.test.mjs`):
 `signal` → `hbmon_wait`/`hbmon_status` iptali (throw yok, iptal özeti döner);
 `progress` → `hbmon_wait` ara-durum bildirimi (NABIZ-005 kaynağıyla aynı).
-Hepsinde `options: { namespace: "build pulse" }`.
+Hepsinde `options: { namespace: "build_pulse" }` — host kuralı
+`^[A-Za-z0-9_-]{1,128}$` (boşluk/Unicode reddedilir; reddedilen tool
+`tools/list`'te **görünmez**, yalnız log'da `Skipping invalid tool
+registration` çıkar — kilit `tests/plugin-bundle.test.mjs`).
 
 ## Tek wakeup yolu (Faz 9)
 

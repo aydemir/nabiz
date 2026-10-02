@@ -3,8 +3,12 @@
 //
 // Ne yapar:
 //   1. `dist/` artifact'lerini doğrular (yoksa/eskiyse `npm run build` ister).
-//   2. Canlı config'e (`~/.config/opencode/opencode.jsonc`) `mcp.nabiz` bloğunu
-//      (mutlak server.js yoluyla) merge eder (eski `bash` key'inden taşıma dahil).
+//   2. Canlı config'e (`~/.config/opencode/opencode.jsonc`) `mcp.servers.nabiz`
+//      bloğunu (mutlak server.js yoluyla) merge eder (eski `bash` key'inden
+//      taşıma dahil). V2 şekli: sunucu düz `mcp.<name>` formunu OKUMAZ
+//      (yalnız `mcp?.servers`, canlı kanıt 2026-10-02 / NABIZ-012), `enabled`
+//      alanı da V2'de yok — kapatmak `disabled`. V1 düz girdi varsa okunur,
+//      iç içe hedefe normalleştirilir.
 //   3. Config'e paket dizinini (`plugin/`, tek entrypoint index.ts) yazar;
 //      repo'ya ait stale dosya girdilerini temizler; eski symlink-modundan
 //      kalan nabiz symlink'lerini kaldırır (çift kayıt önlenir).
@@ -145,11 +149,43 @@ export function loadConfig(path) {
 }
 
 function desiredMcpEntry(root) {
+  // V2 şekli (NABIZ-012): `enabled` alanı V2'de YOK — kapatmak için
+  // `disabled` kullanılır. Açık sunucu için alan hiç yazılmaz (fail-open
+  // varsayılan: sunucu bağlanır).
   return {
     type: "local",
     command: ["node", join(root, "dist", "plugins", "mcp-bash-tools", "src", "server.js")],
-    enabled: true,
   }
+}
+
+/**
+ * Bir MCP girdisini V1 (düz `mcp.<name>`) ve V2 (`mcp.servers.<name>`)
+ * iki yerden de okur. Sunucu 2.x düz şekli kendisi okumaz — V1→V2
+ * migration katmanı yutuyor (canlı kanıt 2026-10-02: sunucu yalnız
+ * `g.info.mcp?.servers` okuyor). Script iki şekli de tanıyıp **iç içe
+ * hedefe** yazar; böylece bir kez normalize olur.
+ *
+ * Dönüş: `{ found, entry, shape }` — `shape` "v2" | "v1" | null
+ * (bulunamadıysa). Kullanıcının kapatma tercihi iki şekilde de okunur
+ * (`disabled:true` veya V1 `enabled:false`).
+ */
+export function readMcpEntry(config, key) {
+  const mcp = config?.mcp
+  const nested = mcp && typeof mcp === "object" && !Array.isArray(mcp) ? mcp.servers : undefined
+  if (nested && typeof nested === "object" && !Array.isArray(nested) && nested[key]) {
+    return { found: true, entry: nested[key], shape: "v2" }
+  }
+  if (mcp && typeof mcp === "object" && !Array.isArray(mcp) && mcp[key]) {
+    return { found: true, entry: mcp[key], shape: "v1" }
+  }
+  return { found: false, entry: undefined, shape: null }
+}
+
+/** Kullanıcının sunucuyu kapatma tercihi (V1 `enabled:false` ≡ V2 `disabled:true`). */
+export function isMcpDisabled(entry) {
+  if (!entry || typeof entry !== "object") return false
+  if (entry.disabled === true) return true
+  return entry.enabled === false
 }
 
 function sameMcp(a, b) {
@@ -174,26 +210,47 @@ export function computePlan(config, root) {
   const changes = []
 
   if (!next.mcp || typeof next.mcp !== "object") next.mcp = {}
+  // Hedef daima iç içe (V2). Düz V1 girişi kullanıcının elinde duruyorsa
+  // silinir — iki yerde aynı sunucuyu tanımlamak çift kayıt riskidir;
+  // opencode V1'i migration ile okusa da bizim yazdığımız tek giriş
+  // iç içe olur.
+  if (!next.mcp.servers || typeof next.mcp.servers !== "object" || Array.isArray(next.mcp.servers)) {
+    next.mcp.servers = {}
+  }
   // Key rename migrasyonu (`bash` → `nabiz`): SADECE bizim dist'imizi
   // gösteren girdi taşınır (başkasının bash MCP'sine dokunulmaz);
-  // `enabled` bayrağı korunur.
-  if (!next.mcp[MCP_KEY] && next.mcp.bash && isOursMcpEntry(next.mcp.bash)) {
-    const keepEnabled = next.mcp.bash.enabled !== false
+  // kapatma tercihi korunur.
+  const bash = readMcpEntry(next, "bash")
+  if (!readMcpEntry(next, MCP_KEY).found && bash.found && isOursMcpEntry(bash.entry)) {
+    const keepDisabled = isMcpDisabled(bash.entry)
+    delete next.mcp[MCP_KEY]
     delete next.mcp.bash
-    next.mcp[MCP_KEY] = { ...desiredMcpEntry(root), enabled: keepEnabled }
-    changes.push(`mcp.bash → mcp.${MCP_KEY} taşındı (key rename)`)
+    delete next.mcp.servers.bash
+    next.mcp.servers[MCP_KEY] = desiredMcpEntry(root)
+    if (keepDisabled) next.mcp.servers[MCP_KEY].disabled = true
+    changes.push(`mcp.bash → mcp.servers.${MCP_KEY} taşındı (key rename)`)
   }
   const wantMcp = desiredMcpEntry(root)
-  if (!next.mcp[MCP_KEY]) {
-    next.mcp[MCP_KEY] = wantMcp
-    changes.push(`mcp.${MCP_KEY} eklenecek: ${wantMcp.command[1]}`)
-  } else if (!sameMcp(next.mcp[MCP_KEY], wantMcp)) {
-    // Komut yolu güncellenir ama kullanıcının `enabled:false` tercihi
-    // korunur (setup sessizce tekrar açmaz).
-    const keepEnabled = next.mcp[MCP_KEY].enabled
-    next.mcp[MCP_KEY] = wantMcp
-    if (keepEnabled === false) next.mcp[MCP_KEY].enabled = false
-    changes.push(`mcp.${MCP_KEY} güncellenecek (komut yolu): ${wantMcp.command[1]}`)
+  const cur = readMcpEntry(next, MCP_KEY)
+  if (!cur.found) {
+    next.mcp.servers[MCP_KEY] = wantMcp
+    changes.push(`mcp.servers.${MCP_KEY} eklenecek: ${wantMcp.command[1]}`)
+  } else if (!sameMcp(cur.entry, wantMcp)) {
+    // Komut yolu güncellenir ama kullanıcının kapatma tercihi korunur
+    // (setup sessizce tekrar açmaz).
+    const keepDisabled = isMcpDisabled(cur.entry)
+    delete next.mcp[MCP_KEY]
+    delete next.mcp.servers[MCP_KEY]
+    next.mcp.servers[MCP_KEY] = wantMcp
+    if (keepDisabled) next.mcp.servers[MCP_KEY].disabled = true
+    if (cur.shape === "v1") changes.push(`mcp.${MCP_KEY} (V1 düz) → mcp.servers.${MCP_KEY} taşındı`)
+    changes.push(`mcp.servers.${MCP_KEY} güncellenecek (komut yolu): ${wantMcp.command[1]}`)
+  } else if (cur.shape === "v1") {
+    // Komut yolu doğru ama giriş hâlâ düz V1: normalize et (idempotans
+    // garantisi — ikinci `--check` temiz çıkar).
+    delete next.mcp[MCP_KEY]
+    next.mcp.servers[MCP_KEY] = cur.entry
+    changes.push(`mcp.${MCP_KEY} (V1 düz) → mcp.servers.${MCP_KEY} normalleştirildi`)
   }
 
   // Repo'ya ait stale dosya girdilerini temizle (V1 `plugin` + V2 `plugins`

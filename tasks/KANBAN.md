@@ -23,6 +23,8 @@ katmanıdır.
 | NABIZ-008 | hbmon kill-switch'i yapısal (7 tool kayıt altında) | done (erken-dönüş + `[hbmon-disabled]` disclosure, 3 test) | P2 |
 | NABIZ-009 | bg_logs tail_bytes sözleşmesi ↔ gerçek cap (512000 ↔ 51200) | done P1 (açıklama + `capped=`); P2 politika açık | P1 |
 | NABIZ-010 | Wake mesajı üçlü kopyası (core `wakeMessage` üretimde ölü) | done (`bg-wake` import'lar, üretim-yolu testi) | P2 |
+| NABIZ-011 | `namespace: "build pulse"` geçersiz → 7 tool sessizce kayıt dışı | done (`build_pulse` + host-kuralı kilidi, 7/7 canlı) | P1 |
+| NABIZ-012 | setup.mjs V1 MCP şekli yazıyor (`mcp.<name>` + `enabled`) | done (`mcp.servers` + `disabled`, V1 okuma/idempotans) | P2 |
 
 Sıra: `NABIZ-001 → NABIZ-002 → NABIZ-003` (003, 001'e bağlı; 001-002 bağımsız,
 paralel yapılabilir). `NABIZ-004 ↔ NABIZ-005` bağımsız, paralel yapılabilir;
@@ -39,6 +41,21 @@ paralel yapılabilir). `NABIZ-004 ↔ NABIZ-005` bağımsız, paralel yapılabil
 - **Watchdog default tavan:** minimax `max(30dk, explicit)` yapıyor ama hbmon
   dev server/watcher destekliyor — kör default server'ları öldürür. Kind-aware
   tavan gerektirir; kanıt birikince hbmon tarafında ayrı TASK açılır.
+
+## 1.5 opencode-compat dalı (2026-10-02)
+
+Kurulum sırasında çıkan iki bulgu; ikisi de iddiayı **çalışan opencode
+2.0.21'den** doğruladı (log satırı + binary içi kaynak), tahminle değil.
+
+| Bulgu | Kanıt | Görev |
+|---|---|---|
+| `namespace: "build pulse"` reddediliyor → 7 tool `tools/list`'te yok, log'da 7× `Skipping invalid tool registration` | regex `^[A-Za-z0-9_-]{1,128}$` (binary içi) | NABIZ-011 (P1) |
+| `setup.mjs` V1 şekli yazıyor (`mcp.<name>` + `enabled`); sunucu yalnız `mcp?.servers` okuyor, V2 şemasında `disabled` var | `for (let [v,k] of Object.entries(g.info.mcp?.servers ?? {}))`; `Mcp.LocalConfig` şeması | NABIZ-012 (P2) |
+
+Ders notu: **TS derlemesi bu iki hatayı da geçiriyor.** namespace doğrulaması
+host'ta (`@opencode/plugin` yalnız tip taşıyor), config şekli ise runtime'da
+migration ile yutuluyor. Yani tip güvenliği bu sınıf hatada kanıt değil —
+kaynak-tarama kilidi şart.
 
 ## 2. Göz Yeniden Değerlendirme (2026-09-27)
 
