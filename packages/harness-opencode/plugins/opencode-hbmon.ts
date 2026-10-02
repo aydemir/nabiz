@@ -18,11 +18,12 @@
  * V2 notu: V1 `tool()` helper + dönen `tool` map'i → V2
  * `ctx.tool.transform(editor => editor.add(...))`. Şemalar JSON Schema,
  * execute `{ content }` döndürür. Tool adları aynı tutulur (LLM + test
- * uyumluluğu); namespace "build pulse" (Faz 8).
+ * uyumluluğu); namespace "build_pulse" (Faz 8; boşluk reddedilir —
+ * NABIZ-011, host kuralı ^[A-Za-z0-9_-]{1,128}$).
  *
  * Faz 8: ToolContext (sessionID, agent, messageID, id, signal, progress)
  * tüm 7 tool'a bağlandı. signal → hbmon_wait/hbmon_status iptal;
- * progress → hbmon_wait ara-durum bildirimi. namespace "build pulse".
+ * progress → hbmon_wait ara-durum bildirimi. namespace "build_pulse".
  */
 
 import { Plugin } from "@opencode/plugin"

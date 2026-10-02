@@ -25,6 +25,7 @@ katmanıdır.
 | NABIZ-010 | Wake mesajı üçlü kopyası (core `wakeMessage` üretimde ölü) | done (`bg-wake` import'lar, üretim-yolu testi) | P2 |
 | NABIZ-011 | `namespace: "build pulse"` geçersiz → 7 tool sessizce kayıt dışı | done (`build_pulse` + host-kuralı kilidi, 7/7 canlı) | P1 |
 | NABIZ-012 | setup.mjs V1 MCP şekli yazıyor (`mcp.<name>` + `enabled`) | done (`mcp.servers` + `disabled`, V1 okuma/idempotans) | P2 |
+| NABIZ-013 | stale `dist/` → plugin tamamen yüklenemiyor (altajan bulgusu) | todo (önce ölç) | P2 |
 
 Sıra: `NABIZ-001 → NABIZ-002 → NABIZ-003` (003, 001'e bağlı; 001-002 bağımsız,
 paralel yapılabilir). `NABIZ-004 ↔ NABIZ-005` bağımsız, paralel yapılabilir;
@@ -56,6 +57,16 @@ Ders notu: **TS derlemesi bu iki hatayı da geçiriyor.** namespace doğrulamas�
 host'ta (`@opencode/plugin` yalnız tip taşıyor), config şekli ise runtime'da
 migration ile yutuluyor. Yani tip güvenliği bu sınıf hatada kanıt değil —
 kaynak-tarama kilidi şart.
+
+**Altajan revizyonu (aynı gün):** İki iddia da CONFIRMED. Ancak kilidin
+kuralı **yanlıştı** — namespace `^[A-Za-z0-9_-]{1,128}$` değil, **segment
+bazlı `^[A-Za-z0-9_-]{1,64}$`** (nokta ayırıcı); `{1,128}` fully qualified
+**tool adının** kuralı. Kilit düzeltildi. Ayrıca altajanın bulduğu üçüncü
+bulgu → **NABIZ-013** (stale `dist` tüm plugin'i düşürüyor).
+
+Altajandan gelen metodoloji notu: **kendi grep desenin log'a düşmesi**
+sahte pozitif üretiyor (`spawning process` satırı). Doğrulama log'dan
+kanıt alırken dosyanın byte offset'ini alıp yalnız sonrasını oku.
 
 ## 2. Göz Yeniden Değerlendirme (2026-09-27)
 

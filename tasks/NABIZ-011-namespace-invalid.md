@@ -71,6 +71,10 @@ ayakta kalıyor; yani "kuruldu" sanılan yüzeyin 7 tool'u ölü.
 2. Kaynak-tarama kilidi: `tests/` altında namespace kuralını test et.
 3. Build + tam süit; log'da `Skipping invalid tool registration` sayısı 0.
 
+> **Düzeltme (altajandan gelen kanıt):** "regex uyumlu" adımı ilk
+> yazımda yanlış kurala dayanmıştı — aşağıdaki "Düzeltilen hata"
+> bölümüne bak. Doğru kural segment bazlıdır, `{1,128}` değil.
+
 ## Etkilenen Dosyalar
 
 - `packages/harness-opencode/plugins/opencode-hbmon.ts`
@@ -115,3 +119,42 @@ host'ta. Bu yüzden `tsc` temiz, `oxlint` temiz, testler yeşil — tool
 yine de hiç kayıt olmuyordu. Aynı desen config şeklinde de var (V1 girdi
 migration ile yutuluyor). Bu iki bulgu tek cümleyle: **opencode-compat
 sınıfı, tip değil çalışma log'uyla kanıtlanır.**
+
+### Altajan doğrulaması (2026-10-02) — iki düzeltme, bir yeni bulgu
+
+**DÜZELTİLEN HATA (kanıt: binary içi kaynak).** Namespace kuralı
+`{1,128}` **değil**:
+
+```js
+function fl(e){ if(e.split(".").every((r)=>/^[A-Za-z0-9_-]{1,64}$/.test(r)))return;
+                return new Ri({name:e,message:`Invalid tool namespace: …`}) }
+function pl(e){ let l=fl(e.options?.namespace); if(l)return l
+                let i=Zr(e);
+                if(!/^[A-Za-z0-9_-]{1,128}$/.test(i)) return …"Invalid tool name" }
+```
+
+Namespace **segment bazlı, 1..64 karakter, nokta ayırıcı**; `{1,128}`
+olan şey namespace değil **fully qualified tool adı**. İlk kilidimiz yanlış
+kuralı kopyalamıştı: 65+ karakterlik segment sessizce kırılırdı, noktalı
+namespace'i ise geçerli olmasına rağmen reddederdi. Kilit düzeltildi
+(`tests/plugin-bundle.test.mjs`: segment kuralı + 65 karakter ve boşluk
+için negatif iddialar). Değer `build_pulse` her iki kurulda da geçerli —
+düzeltilen şey kilit, davranış değil.
+
+**DÜZELTİLEN YANLIŞ YORUM.** Altajan `shellArgv` hatasını "kritik,
+plugin hiç yüklenmiyor" diye bildirdi; **yanlış okuma**: hata **eski
+dist'ten** geliyordu. `dist/bg-tasks.js` şu an `shellArgv` **içeriyor**
+(mtime 07:32, hatalar 04:20–04:32). Geçici bir build penceresi. Ancak
+altajanın "neden oluşuyor" sorusu **gerçek bir yapısal riski** açığa
+çıkardı → NABIZ-013.
+
+**DÜZELTİLEN DOKÜMAN.** `opencode-hbmon.ts:21,25` başlık yorumlarında
+`"build pulse"` kalıyordu; düzeltildi.
+
+### YENİ BULGU — stale-dist yüklenme hatası (NABIZ-013'e devredildi)
+
+`failed to load plugin` + `SyntaxError: Export named 'shellArgv' not found
+in module '…\packages\core\dist\bg-tasks.js'` — 04:20–04:32 arası 9 kez.
+V2 `plugin/index.ts`'yi **yerinde `.ts`** yüklüyor; `src` değişince `dist`
+derlenene kadar plugin **tamamen** yüklenemiyor (7 tool'un hepsi düşer,
+MCP hariç). `npm run build` atlanınca tetikleniyor.

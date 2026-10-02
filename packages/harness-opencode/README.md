@@ -50,10 +50,13 @@ Yedi tool da promise yüzeyinde `ToolContext`
 (kilit: `tests/tool-context.test.mjs`):
 `signal` → `hbmon_wait`/`hbmon_status` iptali (throw yok, iptal özeti döner);
 `progress` → `hbmon_wait` ara-durum bildirimi (NABIZ-005 kaynağıyla aynı).
-Hepsinde `options: { namespace: "build_pulse" }` — host kuralı
-`^[A-Za-z0-9_-]{1,128}$` (boşluk/Unicode reddedilir; reddedilen tool
-`tools/list`'te **görünmez**, yalnız log'da `Skipping invalid tool
-registration` çıkar — kilit `tests/plugin-bundle.test.mjs`).
+Hepsinde `options: { namespace: "build_pulse" }` — host kuralı **segment
+bazlı**: `ns.split(".").every(seg => /^[A-Za-z0-9_-]{1,64}$/)` (nokta
+ayırıcı, boşluk/Unicode reddedilir). Reddedilen tool `tools/list`'te
+**görünmez**, yalnız log'da `Skipping invalid tool registration` çıkar —
+kilit `tests/plugin-bundle.test.mjs`.
+(`^[A-Za-z0-9_-]{1,128}$` kuralı namespace'e değil, fully qualified **tool
+adına** aittir; ikisi karıştırılırsa uzun segment sessizce kırılır.)
 
 ## Tek wakeup yolu (Faz 9)
 
