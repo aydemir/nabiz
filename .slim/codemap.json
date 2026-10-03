@@ -1,0 +1,73 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "last_run": "2026-10-03T12:46:42.594Z",
+    "root": "C:\\Users\\lv\\nabiz",
+    "include_patterns": [
+      "packages/core/src/**/*.ts",
+      "packages/harness-opencode/plugins/**/*.ts",
+      "packages/harness-opencode/plugin/**/*.ts",
+      "packages/harness-opencode/scripts/**/*.mjs",
+      "scripts/**/*.mjs",
+      "extensions/**/*.ts"
+    ],
+    "exclude_patterns": [
+      "node_modules/**",
+      "**/dist/**",
+      "**/*.test.*",
+      "docs/**",
+      "tasks/**"
+    ],
+    "exceptions": []
+  },
+  "file_hashes": {
+    "extensions/bg-hbmon.ts": "14fba5bd05c750d3323d614c0e7009e4",
+    "extensions/hbmon.ts": "1cf21f688055a63a532c58957c50128f",
+    "packages/core/src/bg-tasks.ts": "72756819e720522e2153c3d23bfa024d",
+    "packages/core/src/build-tracker-disclosure.ts": "54a1ed786f106f58958857e09b90d784",
+    "packages/core/src/cpu-liveness-disclosure.ts": "6dacebc512ddee26be6e0eba9afe434f",
+    "packages/core/src/disclosure.ts": "19baba2ee5a1e454d93d6210557930ed",
+    "packages/core/src/hbmon-disclosure.ts": "00d3a5710b3dd139dcb0aa661b2ac670",
+    "packages/core/src/hbmon-tools.ts": "af65f1e13fc88905c6c55fb4c467821b",
+    "packages/core/src/progress.ts": "fd2d4d5833e0a34e7475b88d5c3973da",
+    "packages/core/src/prune.ts": "7d4bf75ea01c29f3ef1814f49fbb1231",
+    "packages/core/src/raw-refill.ts": "a904786fda45d92d69f389ff157f7b2f",
+    "packages/core/src/settle-notice.ts": "cab919becf495b3e4d8396d512920d35",
+    "packages/core/src/truncation-notice.ts": "1bb309f09faa85175813094ec5da63f3",
+    "packages/harness-opencode/plugin/index.ts": "6d4df37b1bdbdcd5d6f601a3ce01fbdb",
+    "packages/harness-opencode/plugins/mcp-bash-tools/src/exec.ts": "9d22f63633c003225e4d25a7cae5f4fe",
+    "packages/harness-opencode/plugins/mcp-bash-tools/src/server.ts": "f9e341bed1d74678bedb1c4c7078fd8b",
+    "packages/harness-opencode/plugins/mcp-bash-tools/src/tools/bash_raw.ts": "3486820ddb1f6223479e3103eb690162",
+    "packages/harness-opencode/plugins/mcp-bash-tools/src/tools/bash_safe.ts": "494310cbbef541c69320d1de8f842141",
+    "packages/harness-opencode/plugins/opencode-build-tracker.ts": "a34311a4c3e0ce84175a554a654a4bd3",
+    "packages/harness-opencode/plugins/opencode-context-saver.ts": "106fae65d66285696cbc268200776fe9",
+    "packages/harness-opencode/plugins/opencode-cpu-liveness.ts": "5914b0708183ea8c259653387abcb52c",
+    "packages/harness-opencode/plugins/opencode-hbmon.ts": "b5f38071c6ba0a3bfae716fc8b2732ec",
+    "packages/harness-opencode/plugins/opencode-settle-noticer.ts": "7d8898449c2b74b7748dbbe4b8dd65fa",
+    "packages/harness-opencode/plugins/opencode-truncation-noticer.ts": "95d929db433081e83c1cf27344c29916",
+    "packages/harness-opencode/plugins/server.ts": "0df3413f8d3be5c5ac39fb9fd37b0208",
+    "packages/harness-opencode/scripts/bg-wake.mjs": "52f6b0b0841cd29e08019e2ea15a9b57",
+    "packages/harness-opencode/scripts/build-mon.mjs": "5e9c3fe8b489e33d1ec6c0b831c33a6a",
+    "packages/harness-opencode/scripts/check-dist.mjs": "26e2967dbe98c2e9a23b764667021fa8",
+    "packages/harness-opencode/scripts/hbmon-build-mon.mjs": "07800faec933e75ed448c5b75ae84fdf",
+    "packages/harness-opencode/scripts/setup.mjs": "d79c6510b7dbf75b010fb32bdaf090cf",
+    "packages/harness-opencode/scripts/timeout-kill-probe/timeout-kill-probe.mjs": "405531a165ed65e7dd355a1b3ff61a7a",
+    "scripts/check-symlink.mjs": "41d5e09aeaf17f00934675a36ffa4e66"
+  },
+  "folder_hashes": {
+    ".": "",
+    "extensions": "37588a52902f150688c5a18608f30e6f",
+    "packages": "bd63a496f4cb5a0b8ec108e2766b6acf",
+    "packages/core": "4abd30decea1e4279235e868ebc392e8",
+    "packages/core/src": "4abd30decea1e4279235e868ebc392e8",
+    "packages/harness-opencode": "d816cba6352f8e245693ee9561f517f7",
+    "packages/harness-opencode/plugin": "dbdeb0a7a92e026e03e86c6ac0288851",
+    "packages/harness-opencode/plugins": "a0bc2fe50507b76c25235219dd80d0dd",
+    "packages/harness-opencode/plugins/mcp-bash-tools": "2b0f109d05a6c6a951c4d51552790396",
+    "packages/harness-opencode/plugins/mcp-bash-tools/src": "2b0f109d05a6c6a951c4d51552790396",
+    "packages/harness-opencode/plugins/mcp-bash-tools/src/tools": "db1912003a3d16a542af30c61d2574e4",
+    "packages/harness-opencode/scripts": "ac643b1701fed388f1ce6f32a37e0662",
+    "packages/harness-opencode/scripts/timeout-kill-probe": "01ce894f0e6710719a2886e1d1763ef3",
+    "scripts": "59080db21add443b067880201d8e049d"
+  }
+}
