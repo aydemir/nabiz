@@ -132,7 +132,7 @@ test("bundle: namespaced sub-options disable one plugin, others stay", async () 
     // Gated plugin'lerin hook'u yok...
     const e = await sessionContext(sessionHooks, [])
     const texts = systemTexts(e.system)
-    ;(assert.ok(!texts.some((t) => t.includes("[tn-"))), "tn disclosure yok")
+    assert.ok(!texts.some((t) => t.includes("[tn-")), "tn disclosure yok")
     assert.ok(!texts.some((t) => t.includes("[cpu-liveness]")), "cl disclosure yok")
     // ...ama diğerleri kaydolmaya devam eder.
     assert.ok(
