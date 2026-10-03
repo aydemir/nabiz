@@ -51,9 +51,18 @@ export default Plugin.define({
     const shared = (ctx.options ?? {}) as Record<string, unknown> as Record<string, unknown>
     if (shared.enabled === false) return
     const cleanups: Array<() => unknown> = []
+    // Slim dersi: her domain bağımsız korunur — biri atarsa kalanı
+    // yüklenmeye devam eder, hata yüksek sesle loglanır (sessiz toplu
+    // ölüm yok). Kilit: `tests/plugin-bundle.test.mjs` (izolasyon).
     for (const sub of SUB_PLUGINS) {
-      const cleanup = await sub.setup({ ...ctx, options: scopedOptions(shared, sub.id) })
-      if (typeof cleanup === "function") cleanups.push(cleanup as () => unknown)
+      try {
+        const cleanup = await sub.setup({ ...ctx, options: scopedOptions(shared, sub.id) })
+        if (typeof cleanup === "function") cleanups.push(cleanup as () => unknown)
+      } catch (e) {
+        console.error(
+          `nabiz: ${sub.id} setup BAŞARISIZ, diğerleri sürüyor: ${e instanceof Error ? e.message : String(e)}`,
+        )
+      }
     }
     return () => {
       for (const cleanup of cleanups.reverse()) {

@@ -10,6 +10,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import bundle from "../dist/plugin/index.js"
+import { NAMESPACE_SEGMENT_RE } from "../dist/plugins/lib/opencode-compat.js"
 import { setupV2, toolAfter, sessionContext, systemTexts, hasHook } from "./v2-harness.mjs"
 
 test("bundle: id nabiz + setup var", () => {
@@ -35,6 +36,25 @@ test("bundle: tüm hook'lar + 7 hbmon tool'u kaydolur", async () => {
   }
 })
 
+test("bundle: bir alt-plugin atarsa kalanı yüklenir (izolasyon)", async () => {
+  // Slim dersi: domain kurulumları bağımsız korunur. context-saver
+  // negatif headChars'ta atar; eski kodda sonrasındaki her şey (hbmon
+  // dahil) ölürdü. Kilit: 7 tool yine de kayıtlı.
+  const { addedTools, sessionHooks, cleanup } = await setupV2(bundle, { "opencode-context-saver": { headChars: -1 } })
+  try {
+    for (const name of ["hbmon_watch", "hbmon_wait", "hbmon_status", "bg_run", "bg_status", "bg_logs", "bg_kill"]) {
+      assert.ok(
+        addedTools.some((t) => t.name === name),
+        `izolasyon kırık: ${name} kayıtlı değil`,
+      )
+    }
+    // Boş kilit olmasın: düşen plugin gerçekten düşmüş olmalı (iz yok).
+    const e = await sessionContext(sessionHooks, [])
+    assert.ok(!systemTexts(e.system).some((t) => t.includes("[context-saver]")), "düşen saver iz bırakmamalı")
+  } finally {
+    await cleanup?.()
+  }
+})
 test("bundle: namespace host kuralına uyar (NABIZ-011 — sessiz kayıt düşürme)", async () => {
   // opencode namespace'i **segment bazlı** doğruluyor (canlı kanıt
   // 2026-10-02, opencode 2.0.21 binary içi kaynak):
@@ -47,8 +67,9 @@ test("bundle: namespace host kuralına uyar (NABIZ-011 — sessiz kayıt düşü
   // qualified tool adına** aittir (pl(): `Invalid tool name`). İlk yazımda
   // ikisi karıştırılmıştı; 65+ karakterlik segment sessizce kırılırdı.
   // @opencode/plugin yalnız tip taşıdığı için `tsc` bu hatayı geçirir.
-  const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
-  const hostAccepts = (ns) => ns.split(".").every((seg) => SEGMENT.test(seg))
+  // Kural tek kaynaktan gelir: `plugins/lib/opencode-compat.ts`
+  // (host varsayım tamponu).
+  const hostAccepts = (ns) => ns.split(".").every((seg) => NAMESPACE_SEGMENT_RE.test(seg))
   const { addedTools, cleanup } = await setupV2(bundle, {})
   try {
     const namespaced = addedTools.filter((t) => t.options?.namespace !== undefined)

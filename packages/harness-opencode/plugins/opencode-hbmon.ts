@@ -48,6 +48,7 @@ import {
 } from "nabiz-core/bg-tasks"
 import { formatProgress, readLastProgress } from "nabiz-core/progress"
 import { resolveEventDirs } from "nabiz-core/settle-notice"
+import { adaptToolInfo } from "./lib/opencode-compat.js"
 
 interface HbmonPluginConfig {
   enabled?: boolean
@@ -166,254 +167,268 @@ export default Plugin.define({
     // önceden yüklenir, closure'a yakalanır. Bin yolu + config yukarıda
     // çözüldü; execute gövdeleri async kalır (transform değil, executor).
     await ctx.tool.transform((editor) => {
-      editor.add({
-        name: "hbmon_watch",
-        description:
-          "Uzun build (>2dk) turn-içi takip: komutu hbmon ile arka planda başlat, hemen dön (bash'te bloklama). Dönen sock'u sonraki hbmon_wait/hbmon_status çağrılarına ver. Burada bekleyeceksen bunu seç (next-contact için build-mon kullan). Argv dizisi ver, shell yok.",
-        input: obj(
-          {
-            command: {
-              type: "array",
-              items: { type: "string" },
-              description: "Build komutu argv dizisi, örn. ['cargo','build','--release']",
+      editor.add(
+        adaptToolInfo({
+          name: "hbmon_watch",
+          description:
+            "Uzun build (>2dk) turn-içi takip: komutu hbmon ile arka planda başlat, hemen dön (bash'te bloklama). Dönen sock'u sonraki hbmon_wait/hbmon_status çağrılarına ver. Burada bekleyeceksen bunu seç (next-contact için build-mon kullan). Argv dizisi ver, shell yok.",
+          input: obj(
+            {
+              command: {
+                type: "array",
+                items: { type: "string" },
+                description: "Build komutu argv dizisi, örn. ['cargo','build','--release']",
+              },
+              uuid: { ...optStr("İzleyici kimliği (boşsa üretilir)") },
+              timeout_sec: { ...num("Derleme tavanı sn (aionra SIGTERM→SIGKILL, exit 124)") },
             },
-            uuid: { ...optStr("İzleyici kimliği (boşsa üretilir)") },
-            timeout_sec: { ...num("Derleme tavanı sn (aionra SIGTERM→SIGKILL, exit 124)") },
-          },
-          ["command"],
-        ),
-        options: { namespace: "build_pulse" },
-        async execute(input) {
-          const args = input as { command: string[]; uuid?: string; timeout_sec?: number }
-          const w = await watchBuild(bin, args.command, {
-            uuid: args.uuid,
-            timeoutSec: args.timeout_sec,
-          })
-          if (!w.handshake) return { content: `hbmon_watch BAŞARISIZ: ${w.error}` }
-          return {
-            content: [
-              `hbmon_watch OK uuid=${w.handshake.uuid}`,
-              `sock=${w.handshake.sock}`,
-              `log=${w.handshake.log}`,
-              "Sonra: hbmon_wait (bekle) veya hbmon_status (yokla).",
-            ].join("\n"),
-          }
-        },
-      })
-
-      editor.add({
-        name: "hbmon_wait",
-        description:
-          "Sock'lu build bitene kadar bloklanarak bekle (polling YOK — bu çağrı uyandırır). Daemon tavanı default 50s (gateway ~60s altı); `timeout (hâlâ çalışıyor)` dönerse aynı sock ile tekrar çağır. Erken-dönüş için until: done,failed,dep_missing,stall_suspect,oom_suspect,timeout (virgüllü). dep_missing dönerse bekleme, log'a bak.",
-        input: obj(
-          {
-            sock: str("hbmon_watch'tan dönen sock"),
-            timeout: { ...num(`Daemon tavanı sn (default ${DEFAULT_CONFIG.defaultTimeoutSec}, gateway altı tut)`) },
-            until: {
-              ...optStr("Erken-dönüş sinyalleri, virgüllü (done,dep_missing,stall_suspect). Yoksa yalnızca bitiş."),
-            },
-          },
-          ["sock"],
-        ),
-        options: { namespace: "build_pulse" },
-        async execute(input, context) {
-          const args = input as { sock: string; timeout?: number; until?: string }
-          const signal = (context as ToolContext | undefined)?.signal
-          const w = await waitBuild(bin, args.sock, {
-            timeoutSec: args.timeout ?? defaultTimeoutSec,
-            until: args.until,
-            signal,
-          })
-          // Faz 8: progress bildirimi — NABIZ-005 ile aynı kaynak.
-          if (w.response !== undefined && context) {
-            const r = w.response as Record<string, unknown>
-            if (typeof r.state === "string" && r.state === "running") {
-              void context.progress({ state: "running", sock: args.sock }).catch(() => {})
-            }
-          }
-          const body = w.response !== undefined ? JSON.stringify(w.response) : ""
-          return { content: body === "" ? w.summary : `${w.summary}\n${body}` }
-        },
-      })
-
-      editor.add({
-        name: "hbmon_status",
-        description:
-          "Sock'lu build'in anlık özeti (ağaç+metrik+sağlık). Hızlı yoklama, beklemez. hbmon_wait `woke_on=... state=running/stalled` dönerse detaya bununla bak.",
-        input: obj({ sock: str("hbmon_watch'tan dönen sock") }, ["sock"]),
-        options: { namespace: "build_pulse" },
-        async execute(input, context) {
-          const args = input as { sock: string }
-          const signal = (context as ToolContext | undefined)?.signal
-          const s = await statusBuild(bin, args.sock, process.env, 10000, false, signal)
-          if (!s.response) return { content: `hbmon_status BAŞARISIZ: ${s.error}` }
-          return { content: JSON.stringify(s.response) }
-        },
-      })
-
-      editor.add({
-        name: "bg_run",
-        description:
-          "Uzun işi arka plana at, HEMEN dön (bloklama yok). LLM serbest kalır: başka iş yap veya turn'ü bitir; iş bitince bekçi aynı oturumda yeni turn açar (`opencode run -s`, uyandırma başına bir LLM turn'ü maliyeti). Kapatmak için notify:false (o zaman bg_status ile yokla). Komut bash -c ile koşar.",
-        input: obj(
-          {
-            name: str("Görev adı (harf/rakam/_.-, max 64)"),
-            command: str("Arka planda koşacak bash komutu"),
-            notify: { ...bool("Bitince aynı oturumu uyandır (default true)") },
-            timeout_sec: { ...num("İş tavanı sn (aionra SIGTERM→SIGKILL)") },
-          },
-          ["name", "command"],
-        ),
-        options: { namespace: "build_pulse" },
-        async execute(input, context) {
-          const args = input as { name: string; command: string; notify?: boolean; timeout_sec?: number }
-          if (!NAME_RE.test(args.name)) {
-            return { content: "bg_run HATA: `name` /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/ uymalı" }
-          }
-          const notify = args.notify ?? true
-          const w = await watchBuild(bin, shellArgv(args.command), {
-            timeoutSec: args.timeout_sec,
-            label: args.name,
-          })
-          if (!w.handshake) return { content: `bg_run BAŞARISIZ: ${w.error}` }
-          const h = w.handshake
-          const dir = bgDir()
-          const sessionID = (context as ToolContext | undefined)?.sessionID ?? ""
-          const out = h.log.endsWith(".jsonl") ? h.log.slice(0, -6) + ".out" : outFromSock(h.sock)
-          writeRecord(dir, {
-            v: 1,
-            name: args.name,
-            uuid: h.uuid,
-            sock: h.sock,
-            log: h.log,
-            out,
-            sessionID,
-            notify,
-            createdAt: new Date().toISOString(),
-          })
-          const lines = [
-            `bg_run OK id=${h.uuid} name=${args.name}`,
-            `İzle: bg_status/bg_logs/bg_kill (id veya name ile).`,
-          ]
-          if (notify && sessionID !== "") {
-            const wake = resolveWakeScript(config.wakeScript, import.meta.url)
-            try {
-              const wakeLog = join(dir, `bg-${h.uuid}.wake.log`)
-              const outFd = openSync(wakeLog, "a")
-              // win32 .cmd kuralı (runHbmon ile aynı: yalnızca test
-              // shim'leri; gerçek runtime her zaman node .exe — Node .cmd'yi
-              // doğrudan spawn edemez, ComSpec DOĞRUDAN spawn edilir).
-              let wakeBin = resolveWakeNodeBin()
-              let wakeArgs = [wake, "--session", sessionID, "--sock", h.sock, "--log", h.log, "--name", args.name]
-              if (process.platform === "win32" && /\.(cmd|bat)$/i.test(wakeBin)) {
-                wakeArgs = ["/d", "/c", wakeBin, ...wakeArgs]
-                wakeBin = process.env.ComSpec ?? "cmd.exe"
-              }
-              const child = spawn(wakeBin, wakeArgs, {
-                // win32: detached dosya-fd çıktıyı yutar (boş log, ölçüldü) —
-                // Windows çocuğu zaten ebeveynden bağımsız yaşatır, detached
-                // gerekmez. windowsHide konsol parlamasını önler (POSIX'te
-                // yoksayılır).
-                detached: process.platform !== "win32",
-                stdio: ["ignore", outFd, outFd],
-                windowsHide: true,
-              })
-              child.unref()
-              closeSync(outFd)
-              lines.push(`Uyandırma kuruldu: bitince bu oturumda yeni turn açılır.`)
-              lines.push(`Bekçi logu: ${wakeLog}`)
-            } catch {
-              lines.push(`Bekçi kurulamadı (wake atlandı); bg_status ile yokla.`)
-            }
-          } else if (notify) {
-            lines.push(`sessionID yok — uyandırma kurulamadı; bg_status ile yokla.`)
-          } else {
-            lines.push(`notify:false — uyandırma yok; bg_status ile yokla.`)
-          }
-          return { content: lines.join("\n") }
-        },
-      })
-
-      editor.add({
-        name: "bg_status",
-        description: "Arka plan görevinin anlık özeti (compact). Beklemez. id: name veya uuid-prefix.",
-        input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
-        options: { namespace: "build_pulse" },
-        async execute(input, context) {
-          const args = input as { id: string }
-          const r = resolveRecord(bgDir(), args.id)
-          if (!r.record) {
-            const prog = readLastProgress(resolveEventDirs(undefined, process.env, process.cwd()), args.id)
-            if (prog) return { content: `name=${args.id} ${formatProgress(prog)} (build-mon izlemesi)` }
-            return { content: `bg_status HATA: ${r.error}` }
-          }
-          const signal = (context as ToolContext | undefined)?.signal
-          const s = await statusBuild(bin, r.record.sock, process.env, 10000, true, signal)
-          if (!s.response) {
-            const ev = readLastEvent(r.record.log)
-            if (ev && isTerminalState(ev.state)) {
-              const dur = typeof ev.duration_sec === "number" ? ` in ${ev.duration_sec.toFixed(1)}s` : ""
-              return {
-                content: `name=${r.record.name} ${ev.state} code=${ev.code ?? "?"}${dur} (monitör kapanmış, log'dan)`,
-              }
-            }
-            return { content: `bg_status name=${r.record.name} BAŞARISIZ: ${s.error}` }
-          }
-          return { content: `name=${r.record.name} ${JSON.stringify(s.response)}` }
-        },
-      })
-
-      editor.add({
-        name: "bg_logs",
-        description:
-          "Arka plan görevinin stdout kuyruğu (.out tail, tail modunda max 512KB). id: name veya uuid-prefix. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür. Cursor (offsetli) modda tavan 50KB — üstü kırpılır, receipt'te capped ile bildirilir.",
-        input: obj(
-          {
-            id: str("Görev name veya uuid-prefix (bg_run'dan döner)"),
-            tail_bytes: {
-              ...num(
-                "Kuyruk baytı (default 51200; tail modunda max 512000, cursor modunda max 51200 — üstü capped ile kırpılır)",
-              ),
-            },
-            offset: { ...num("Artımlı okuma bayt konumu (önceki yanıtın next_offset'i; yoksa tail modu)") },
-          },
-          ["id"],
-        ),
-        options: { namespace: "build_pulse" },
-        async execute(input) {
-          const args = input as { id: string; tail_bytes?: number; offset?: number }
-          const r = resolveRecord(bgDir(), args.id)
-          if (!r.record) return { content: `bg_logs HATA: ${r.error}` }
-          if (args.offset === undefined) {
-            const tail = Math.min(Math.max(args.tail_bytes ?? 50 * 1024, 1), 512 * 1024)
-            const out = readOutTail(r.record.out, tail)
-            return { content: `[${r.record.name} .out${out.truncated ? " (TRUNCATED, kuyruk)" : ""}]\n${out.text}` }
-          }
-          const repeat = offsetTracker.note(r.record.uuid, args.offset)
-          const cur = readOutCursor(r.record.out, args.offset, args.tail_bytes ?? 50 * 1024)
-          const head = repeat ? `[tekrar] yeni çıktı yok; bekle ya da bildirimi bekle (offset=${args.offset})\n` : ""
-          return { content: head + formatCursorReceipt(r.record.name, args.offset, cur, cur.text) }
-        },
-      })
-
-      editor.add({
-        name: "bg_kill",
-        description: "Arka plan görevini öldür (process group, TERM). id: name veya uuid-prefix.",
-        input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
-        options: { namespace: "build_pulse" },
-        async execute(input) {
-          const args = input as { id: string }
-          const r = resolveRecord(bgDir(), args.id)
-          if (!r.record) return { content: `bg_kill HATA: ${r.error}` }
-          offsetTracker.forget(r.record.uuid)
-          const k = await runHbmon(bin, ["kill", "--sock", r.record.sock], 30000)
-          if (k.code !== 0)
+            ["command"],
+          ),
+          options: { namespace: "build_pulse" },
+          async execute(input) {
+            const args = input as { command: string[]; uuid?: string; timeout_sec?: number }
+            const w = await watchBuild(bin, args.command, {
+              uuid: args.uuid,
+              timeoutSec: args.timeout_sec,
+            })
+            if (!w.handshake) return { content: `hbmon_watch BAŞARISIZ: ${w.error}` }
             return {
-              content: `bg_kill name=${r.record.name} BAŞARISIZ (exit ${k.code}): ${(k.stderr || k.stdout).trim().slice(0, 300)}`,
+              content: [
+                `hbmon_watch OK uuid=${w.handshake.uuid}`,
+                `sock=${w.handshake.sock}`,
+                `log=${w.handshake.log}`,
+                "Sonra: hbmon_wait (bekle) veya hbmon_status (yokla).",
+              ].join("\n"),
             }
-          return { content: `bg_kill OK name=${r.record.name} — bg_status ile teyit et.` }
-        },
-      })
+          },
+        }),
+      )
+
+      editor.add(
+        adaptToolInfo({
+          name: "hbmon_wait",
+          description:
+            "Sock'lu build bitene kadar bloklanarak bekle (polling YOK — bu çağrı uyandırır). Daemon tavanı default 50s (gateway ~60s altı); `timeout (hâlâ çalışıyor)` dönerse aynı sock ile tekrar çağır. Erken-dönüş için until: done,failed,dep_missing,stall_suspect,oom_suspect,timeout (virgüllü). dep_missing dönerse bekleme, log'a bak.",
+          input: obj(
+            {
+              sock: str("hbmon_watch'tan dönen sock"),
+              timeout: { ...num(`Daemon tavanı sn (default ${DEFAULT_CONFIG.defaultTimeoutSec}, gateway altı tut)`) },
+              until: {
+                ...optStr("Erken-dönüş sinyalleri, virgüllü (done,dep_missing,stall_suspect). Yoksa yalnızca bitiş."),
+              },
+            },
+            ["sock"],
+          ),
+          options: { namespace: "build_pulse" },
+          async execute(input, context) {
+            const args = input as { sock: string; timeout?: number; until?: string }
+            const signal = (context as ToolContext | undefined)?.signal
+            const w = await waitBuild(bin, args.sock, {
+              timeoutSec: args.timeout ?? defaultTimeoutSec,
+              until: args.until,
+              signal,
+            })
+            // Faz 8: progress bildirimi — NABIZ-005 ile aynı kaynak.
+            if (w.response !== undefined && context) {
+              const r = w.response as Record<string, unknown>
+              if (typeof r.state === "string" && r.state === "running") {
+                void context.progress({ state: "running", sock: args.sock }).catch(() => {})
+              }
+            }
+            const body = w.response !== undefined ? JSON.stringify(w.response) : ""
+            return { content: body === "" ? w.summary : `${w.summary}\n${body}` }
+          },
+        }),
+      )
+
+      editor.add(
+        adaptToolInfo({
+          name: "hbmon_status",
+          description:
+            "Sock'lu build'in anlık özeti (ağaç+metrik+sağlık). Hızlı yoklama, beklemez. hbmon_wait `woke_on=... state=running/stalled` dönerse detaya bununla bak.",
+          input: obj({ sock: str("hbmon_watch'tan dönen sock") }, ["sock"]),
+          options: { namespace: "build_pulse" },
+          async execute(input, context) {
+            const args = input as { sock: string }
+            const signal = (context as ToolContext | undefined)?.signal
+            const s = await statusBuild(bin, args.sock, process.env, 10000, false, signal)
+            if (!s.response) return { content: `hbmon_status BAŞARISIZ: ${s.error}` }
+            return { content: JSON.stringify(s.response) }
+          },
+        }),
+      )
+
+      editor.add(
+        adaptToolInfo({
+          name: "bg_run",
+          description:
+            "Uzun işi arka plana at, HEMEN dön (bloklama yok). LLM serbest kalır: başka iş yap veya turn'ü bitir; iş bitince bekçi aynı oturumda yeni turn açar (`opencode run -s`, uyandırma başına bir LLM turn'ü maliyeti). Kapatmak için notify:false (o zaman bg_status ile yokla). Komut bash -c ile koşar.",
+          input: obj(
+            {
+              name: str("Görev adı (harf/rakam/_.-, max 64)"),
+              command: str("Arka planda koşacak bash komutu"),
+              notify: { ...bool("Bitince aynı oturumu uyandır (default true)") },
+              timeout_sec: { ...num("İş tavanı sn (aionra SIGTERM→SIGKILL)") },
+            },
+            ["name", "command"],
+          ),
+          options: { namespace: "build_pulse" },
+          async execute(input, context) {
+            const args = input as { name: string; command: string; notify?: boolean; timeout_sec?: number }
+            if (!NAME_RE.test(args.name)) {
+              return { content: "bg_run HATA: `name` /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/ uymalı" }
+            }
+            const notify = args.notify ?? true
+            const w = await watchBuild(bin, shellArgv(args.command), {
+              timeoutSec: args.timeout_sec,
+              label: args.name,
+            })
+            if (!w.handshake) return { content: `bg_run BAŞARISIZ: ${w.error}` }
+            const h = w.handshake
+            const dir = bgDir()
+            const sessionID = (context as ToolContext | undefined)?.sessionID ?? ""
+            const out = h.log.endsWith(".jsonl") ? h.log.slice(0, -6) + ".out" : outFromSock(h.sock)
+            writeRecord(dir, {
+              v: 1,
+              name: args.name,
+              uuid: h.uuid,
+              sock: h.sock,
+              log: h.log,
+              out,
+              sessionID,
+              notify,
+              createdAt: new Date().toISOString(),
+            })
+            const lines = [
+              `bg_run OK id=${h.uuid} name=${args.name}`,
+              `İzle: bg_status/bg_logs/bg_kill (id veya name ile).`,
+            ]
+            if (notify && sessionID !== "") {
+              const wake = resolveWakeScript(config.wakeScript, import.meta.url)
+              try {
+                const wakeLog = join(dir, `bg-${h.uuid}.wake.log`)
+                const outFd = openSync(wakeLog, "a")
+                // win32 .cmd kuralı (runHbmon ile aynı: yalnızca test
+                // shim'leri; gerçek runtime her zaman node .exe — Node .cmd'yi
+                // doğrudan spawn edemez, ComSpec DOĞRUDAN spawn edilir).
+                let wakeBin = resolveWakeNodeBin()
+                let wakeArgs = [wake, "--session", sessionID, "--sock", h.sock, "--log", h.log, "--name", args.name]
+                if (process.platform === "win32" && /\.(cmd|bat)$/i.test(wakeBin)) {
+                  wakeArgs = ["/d", "/c", wakeBin, ...wakeArgs]
+                  wakeBin = process.env.ComSpec ?? "cmd.exe"
+                }
+                const child = spawn(wakeBin, wakeArgs, {
+                  // win32: detached dosya-fd çıktıyı yutar (boş log, ölçüldü) —
+                  // Windows çocuğu zaten ebeveynden bağımsız yaşatır, detached
+                  // gerekmez. windowsHide konsol parlamasını önler (POSIX'te
+                  // yoksayılır).
+                  detached: process.platform !== "win32",
+                  stdio: ["ignore", outFd, outFd],
+                  windowsHide: true,
+                })
+                child.unref()
+                closeSync(outFd)
+                lines.push(`Uyandırma kuruldu: bitince bu oturumda yeni turn açılır.`)
+                lines.push(`Bekçi logu: ${wakeLog}`)
+              } catch {
+                lines.push(`Bekçi kurulamadı (wake atlandı); bg_status ile yokla.`)
+              }
+            } else if (notify) {
+              lines.push(`sessionID yok — uyandırma kurulamadı; bg_status ile yokla.`)
+            } else {
+              lines.push(`notify:false — uyandırma yok; bg_status ile yokla.`)
+            }
+            return { content: lines.join("\n") }
+          },
+        }),
+      )
+
+      editor.add(
+        adaptToolInfo({
+          name: "bg_status",
+          description: "Arka plan görevinin anlık özeti (compact). Beklemez. id: name veya uuid-prefix.",
+          input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
+          options: { namespace: "build_pulse" },
+          async execute(input, context) {
+            const args = input as { id: string }
+            const r = resolveRecord(bgDir(), args.id)
+            if (!r.record) {
+              const prog = readLastProgress(resolveEventDirs(undefined, process.env, process.cwd()), args.id)
+              if (prog) return { content: `name=${args.id} ${formatProgress(prog)} (build-mon izlemesi)` }
+              return { content: `bg_status HATA: ${r.error}` }
+            }
+            const signal = (context as ToolContext | undefined)?.signal
+            const s = await statusBuild(bin, r.record.sock, process.env, 10000, true, signal)
+            if (!s.response) {
+              const ev = readLastEvent(r.record.log)
+              if (ev && isTerminalState(ev.state)) {
+                const dur = typeof ev.duration_sec === "number" ? ` in ${ev.duration_sec.toFixed(1)}s` : ""
+                return {
+                  content: `name=${r.record.name} ${ev.state} code=${ev.code ?? "?"}${dur} (monitör kapanmış, log'dan)`,
+                }
+              }
+              return { content: `bg_status name=${r.record.name} BAŞARISIZ: ${s.error}` }
+            }
+            return { content: `name=${r.record.name} ${JSON.stringify(s.response)}` }
+          },
+        }),
+      )
+
+      editor.add(
+        adaptToolInfo({
+          name: "bg_logs",
+          description:
+            "Arka plan görevinin stdout kuyruğu (.out tail, tail modunda max 512KB). id: name veya uuid-prefix. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür. Cursor (offsetli) modda tavan 50KB — üstü kırpılır, receipt'te capped ile bildirilir.",
+          input: obj(
+            {
+              id: str("Görev name veya uuid-prefix (bg_run'dan döner)"),
+              tail_bytes: {
+                ...num(
+                  "Kuyruk baytı (default 51200; tail modunda max 512000, cursor modunda max 51200 — üstü capped ile kırpılır)",
+                ),
+              },
+              offset: { ...num("Artımlı okuma bayt konumu (önceki yanıtın next_offset'i; yoksa tail modu)") },
+            },
+            ["id"],
+          ),
+          options: { namespace: "build_pulse" },
+          async execute(input) {
+            const args = input as { id: string; tail_bytes?: number; offset?: number }
+            const r = resolveRecord(bgDir(), args.id)
+            if (!r.record) return { content: `bg_logs HATA: ${r.error}` }
+            if (args.offset === undefined) {
+              const tail = Math.min(Math.max(args.tail_bytes ?? 50 * 1024, 1), 512 * 1024)
+              const out = readOutTail(r.record.out, tail)
+              return { content: `[${r.record.name} .out${out.truncated ? " (TRUNCATED, kuyruk)" : ""}]\n${out.text}` }
+            }
+            const repeat = offsetTracker.note(r.record.uuid, args.offset)
+            const cur = readOutCursor(r.record.out, args.offset, args.tail_bytes ?? 50 * 1024)
+            const head = repeat ? `[tekrar] yeni çıktı yok; bekle ya da bildirimi bekle (offset=${args.offset})\n` : ""
+            return { content: head + formatCursorReceipt(r.record.name, args.offset, cur, cur.text) }
+          },
+        }),
+      )
+
+      editor.add(
+        adaptToolInfo({
+          name: "bg_kill",
+          description: "Arka plan görevini öldür (process group, TERM). id: name veya uuid-prefix.",
+          input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
+          options: { namespace: "build_pulse" },
+          async execute(input) {
+            const args = input as { id: string }
+            const r = resolveRecord(bgDir(), args.id)
+            if (!r.record) return { content: `bg_kill HATA: ${r.error}` }
+            offsetTracker.forget(r.record.uuid)
+            const k = await runHbmon(bin, ["kill", "--sock", r.record.sock], 30000)
+            if (k.code !== 0)
+              return {
+                content: `bg_kill name=${r.record.name} BAŞARISIZ (exit ${k.code}): ${(k.stderr || k.stdout).trim().slice(0, 300)}`,
+              }
+            return { content: `bg_kill OK name=${r.record.name} — bg_status ile teyit et.` }
+          },
+        }),
+      )
     })
   },
 })

@@ -14,6 +14,9 @@ bash-tools sunucusu. Tek giriş noktası `../plugin/index.ts` (bundle, id `nabiz
   bildirimi + next-contact yerleşimi.
 - `opencode-cpu-liveness.ts` — CPU stall gözcüsü (yalnız `session.hook("context")`).
 - `server.ts` — re-export barrel (plugin değil).
+- `lib/opencode-compat.ts` — host varsayım tamponu (ad/namespace
+  regexleri, hook adları, izin sözlüğü; `adaptToolInfo` kayıt anında
+  fail-loud doğrular; slim v1/v2 katmanından ilham).
 - `mcp-bash-tools/` — ayrı MCP sunucusu: `server.ts` (ad `nabiz`) + `src/tools/`
   (`safe`/`raw` → LLM'de `nabiz_safe`/`nabiz_raw`); `src/exec.ts` çalıştırma çekirdeği.
 
