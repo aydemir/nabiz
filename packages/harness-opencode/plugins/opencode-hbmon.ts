@@ -90,12 +90,26 @@ const NATIVE_PUSH_MAX_WAIT_SEC = 4 * 60 * 60
  * sonrası temiz çıkış; canlı kanıt: sonsuz beklçi yüzünden
  * test süreci çıkamıyordu).
  */
+/** .out dosyasının boyutu (yoksa undefined) — wait_ms büyüme tabanı. */
+function outFileSize(path: string): number | undefined {
+  try {
+    return statSync(path).size
+  } catch {
+    return undefined
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => {
     const t = setTimeout(r, ms)
     t.unref?.()
   })
 }
+
+/** bg_logs wait_ms tavanı (pi ile aynı): istek üstü sessizce kırpılır, hint bildirilir. */
+const WAIT_CAP_MS = 30000
+/** Bekleme dilimi: daemon-side bloklu bekleme (polling değil). */
+const WAIT_SLICE_MS = 5000
 
 /** Native push hata bütçesi: bu kadar ardışık hata sonra beklerci bırakır. */
 const NATIVE_PUSH_MAX_ERRORS = 3
@@ -494,7 +508,7 @@ export default Plugin.define({
         adaptToolInfo({
           name: "bg_logs",
           description:
-            "Arka plan görevinin stdout kuyruğu (.out tail, tail modunda max 512KB). id: name veya uuid-prefix. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür. Cursor (offsetli) modda tavan 50KB — üstü kırpılır, receipt'te capped ile bildirilir. Bloklayan bekleme YOKTUR (pi'deki `wait_ms` eşdeğeri yok) — bitmeyi bekçi bildirimi getirir, döngü kurma.",
+            "Arka plan görevinin stdout kuyruğu (.out tail, tail modunda max 512KB). id: name veya uuid-prefix. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür. Cursor (offsetli) modda tavan 50KB — üstü kırpılır, receipt'te capped ile bildirilir. wait_ms>0 verilirse bloklayan okuma yapar: yeni çıktı veya terminal durum gelene kadar bekler (cap 30000).",
           input: obj(
             {
               id: str("Görev name veya uuid-prefix (bg_run'dan döner)"),
@@ -504,25 +518,84 @@ export default Plugin.define({
                 ),
               },
               offset: { ...num("Artımlı okuma bayt konumu (önceki yanıtın next_offset'i; yoksa tail modu)") },
+              wait_ms: {
+                ...num(
+                  "Bloklayan okuma: yeni çıktı veya terminal durum gelene kadar bekle (cap 30000, aşım kırpılır + hint). Bildirim beklerken döngü kurmak yerine tek çağrıda bekle.",
+                ),
+              },
             },
             ["id"],
           ),
           options: { namespace: "build_pulse" },
-          async execute(input) {
-            const args = input as { id: string; tail_bytes?: number; offset?: number }
+          async execute(input, context) {
+            const args = input as { id: string; tail_bytes?: number; offset?: number; wait_ms?: number }
             const r = resolveRecord(bgDir(), args.id)
             if (!r.record) return { content: `bg_logs HATA: ${r.error}` }
-            if (args.offset === undefined) {
-              const tail = Math.min(Math.max(args.tail_bytes ?? 50 * 1024, 1), 512 * 1024)
-              const out = readOutTail(r.record.out, tail)
-              return {
-                content: `[${r.record.name} .out${out.truncated ? " (TRUNCATED, kuyruk)" : ""}]\n${out.text}\n${BG_LOGS_NEXT}\n${BG_COLLECT}`,
+            const rec = r.record
+            const requested = typeof args.wait_ms === "number" && args.wait_ms > 0 ? Math.floor(args.wait_ms) : 0
+            const budget = Math.min(requested, WAIT_CAP_MS)
+            const clipped = requested > WAIT_CAP_MS
+
+            const read = (): string => {
+              if (args.offset === undefined) {
+                const tail = Math.min(Math.max(args.tail_bytes ?? 50 * 1024, 1), 512 * 1024)
+                const out = readOutTail(rec.out, tail)
+                return `[${rec.name} .out${out.truncated ? " (TRUNCATED, kuyruk)" : ""}]\n${out.text}`
               }
+              const repeat = offsetTracker.note(rec.uuid, args.offset)
+              const cur = readOutCursor(rec.out, args.offset, args.tail_bytes ?? 50 * 1024)
+              const head = repeat
+                ? `[tekrar] yeni çıktı yok; bekle ya da bildirimi bekle (offset=${args.offset})\n`
+                : ""
+              return head + formatCursorReceipt(rec.name, args.offset, cur, cur.text)
             }
-            const repeat = offsetTracker.note(r.record.uuid, args.offset)
-            const cur = readOutCursor(r.record.out, args.offset, args.tail_bytes ?? 50 * 1024)
-            const head = repeat ? `[tekrar] yeni çıktı yok; bekle ya da bildirimi bekle (offset=${args.offset})\n` : ""
-            return { content: head + formatCursorReceipt(r.record.name, args.offset, cur, cur.text) }
+
+            let body = read()
+            let wake = "immediate"
+            if (budget > 0) {
+              // Bekleme tabanı: cursor modunda istenen offset, tail modunda giriş
+              // boyutu. Terminal tespiti log'dan (daemon kapanmış olsa da çalışır).
+              const signal = (context as ToolContext | undefined)?.signal
+              const baseline = args.offset === undefined ? outFileSize(rec.out) : Math.max(0, Math.floor(args.offset))
+              const t0 = Date.now()
+              wake = "timeout"
+              for (;;) {
+                const remaining = budget - (Date.now() - t0)
+                if (remaining <= 0 || signal?.aborted) break
+                const sliceSec = Math.max(1, Math.ceil(Math.min(WAIT_SLICE_MS, remaining) / 1000))
+                await waitBuild(bin, rec.sock, {
+                  timeoutSec: sliceSec,
+                  until: "done,failed,dep_missing,timeout",
+                  signal,
+                })
+                const ev = readLastEvent(rec.log)
+                const nowSize = outFileSize(rec.out)
+                const grew =
+                  nowSize !== undefined && nowSize > 0 && (baseline === undefined ? nowSize > 0 : nowSize > baseline)
+                if (isTerminalState(ev?.state)) {
+                  wake = "terminal"
+                  break
+                }
+                if (grew) {
+                  wake = "new-output"
+                  break
+                }
+              }
+              body = read()
+              const effective = Date.now() - t0
+              body +=
+                `\n(wait_ms=${requested}${clipped ? `→${budget} (cap ${WAIT_CAP_MS}'e kırpıldı)` : ""}` +
+                ` effective_wait_ms=${effective} timed_out=${wake === "timeout"} wake=${wake})`
+            }
+            // Cursor modunda zincir disiplini (next_offset), tail modunda toplama
+            // hatırlatması; bloklayan bekleme döndüyse bekleme ipucu da düşer.
+            const advice =
+              args.offset !== undefined
+                ? BG_LOGS_NEXT
+                : wake === "timeout"
+                  ? `${BG_LOGS_NEXT} ${BG_COLLECT}`
+                  : BG_COLLECT
+            return { content: `${body}\n${advice}` }
           },
         }),
       )

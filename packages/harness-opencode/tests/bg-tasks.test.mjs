@@ -261,7 +261,9 @@ test("bg disiplini: yanıtlar sıradaki adımı taşır (bm DISCIPLINE_TEXT kar�
     writeRecord(dir, rec({ name: "push1", uuid: "disc1", out, sock: handshake.sock, log: handshake.log }))
     const logs = String(await runTool("bg_logs", { id: "push1" }, {}))
     assert.match(logs, /satir1/)
-    assert.match(logs, /bir sonraki `next_offset` değerini kullan/)
+    assert.match(logs, /Final cevaptan önce/) // tail modunda toplama hatırlatması
+    const cur = String(await runTool("bg_logs", { id: "push1", offset: 0 }, {}))
+    assert.match(cur, /bir sonraki `next_offset` değerini kullan/) // cursor modunda zincir disiplini
 
     // bg_status: bekleme aracı değil uyarısı (daemon kapalıyken log fallback'i de olabilir)
     const st = String(await runTool("bg_status", { id: "push1" }, {}))
@@ -271,6 +273,57 @@ test("bg disiplini: yanıtlar sıradaki adımı taşır (bm DISCIPLINE_TEXT kar�
     else process.env.HBMON_BG_DIR = prevDir
     if (prevNode === undefined) delete process.env.NABIZ_WAKE_NODE
     else process.env.NABIZ_WAKE_NODE = prevNode
+  }
+})
+
+test("bg_logs wait_ms: terminalde uyanır, bütçede kırpılır, hint bildirir", async () => {
+  // wait_ms = bloklayan okuma (pi'deki bg_logs wait_ms'in opencode karşılığı):
+  // yeni çıktı veya terminal durum gelene kadar bekler. Sahte hbmon:
+  // `wait` çağrısında log'a terminal olay yazar (state=done), `status` döner.
+  const dir = mkdtempSync(join(tmpdir(), "bg-"))
+  const prevDir = process.env.HBMON_BG_DIR
+  const log = join(dir, "w.jsonl")
+  const out = join(dir, "w.out")
+  writeFileSync(out, "satir1\n")
+  writeRecord(dir, rec({ name: "waiter", uuid: "wait1", out, log, sock: join(dir, "w.sock") }))
+  const shim = writeNodeShim(
+    dir,
+    "hbmon",
+    `const fs = require("fs");
+if (process.argv[2] === "wait") { fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ ev: "exit", state: "done", code: 0 }) + "\\n"); process.exit(0) }
+process.exit(0)
+`,
+  )
+  process.env.HBMON_BG_DIR = dir
+  try {
+    const { addedTools } = await setupV2(hbmonFactory, { bin: shim })
+    const bgLogs = addedTools.find((t) => t.name === "bg_logs")
+    const call = async (input) =>
+      textOf((await bgLogs.execute(input, { signal: new AbortController().signal })).content)
+
+    const terminal = await call({ id: "waiter", wait_ms: 5000 })
+    assert.match(terminal, /wake=terminal/)
+    assert.match(terminal, /timed_out=false/)
+    assert.ok(terminal.includes("satir1"), "tail gövdesi dönmeli")
+
+    // terminal YOKSA bütçe dolar → timed_out + kırpma ipucu (kendi kaydı/log'u)
+    const log2 = join(dir, "w2.jsonl")
+    writeFileSync(log2, "")
+    writeFileSync(out, "satir1\n")
+    writeRecord(dir, rec({ name: "sessiz", uuid: "wait2", out, log: log2, sock: join(dir, "w2.sock") }))
+    const quiet = writeNodeShim(dir, "hbmon2", "process.exit(0)\n")
+    const { addedTools: tools2 } = await setupV2(hbmonFactory, { bin: quiet })
+    const logs2 = tools2.find((t) => t.name === "bg_logs")
+    const capped = textOf(
+      (await logs2.execute({ id: "sessiz", wait_ms: 999999 }, { signal: new AbortController().signal })).content,
+    )
+    assert.match(capped, new RegExp(`wait_ms=999999→${30000} \\(cap 30000'e kırpıldı\\)`))
+    assert.match(capped, /timed_out=true/)
+    assert.match(capped, /wake=timeout/)
+    assert.match(capped, /next_offset/)
+  } finally {
+    if (prevDir === undefined) delete process.env.HBMON_BG_DIR
+    else process.env.HBMON_BG_DIR = prevDir
   }
 })
 
