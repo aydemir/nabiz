@@ -33,7 +33,7 @@
  */
 import { spawn } from "node:child_process"
 import { appendFileSync, closeSync, openSync, readSync, statSync } from "node:fs"
-import { wakeMessage } from "nabiz-core/bg-tasks"
+import { claimWake, releaseWake, wakeClaimed, wakeMessage } from "nabiz-core/bg-tasks"
 
 const args = process.argv.slice(2)
 const get = (k, d) => {
@@ -64,6 +64,12 @@ const PERSIST_GAP_SEC = num(get("--persist-gap-sec", "20"), 20)
 const MAX_INJECTIONS = Math.max(1, Math.floor(num(get("--max-injections", "3"), 3)))
 const BACKOFF_SEC = num(get("--backoff-sec", "15"), 15)
 const ATTEMPT_LOG = get("--attempt-log", SOCK.endsWith(".sock") ? SOCK.slice(0, -5) + ".attempts.jsonl" : "")
+// Native push claim dosyası: opencode plugin'i süreç ayaktayken
+// `session.synthetic` ile bildirimi kendisi düşürür ve claim'i yazar.
+// Claim varsa bu bekçi ATLAR (çift bildirim yok); claim yoksa ya native
+// push başarısız oldu (claim bırakıldı) ya da süreç öldü → bekçi devralır.
+const CLAIM_DIR = get("--claim-dir", "")
+const CLAIM_ID = get("--claim-uuid", "")
 // (1) retry'lar aynı marker/taskId semantiğini korur: denemeler JSONL'deki
 // injection_ts'lerle, turn'ler created zamanlarıyla ayrışır.
 const MARKER = TASK_ID ? `[wake:${TASK_ID}]` : ""
@@ -207,9 +213,17 @@ async function inject(state, code) {
   const base = wakeMessage(NAME, state, code ?? undefined)
   const msg = MARKER ? `${base} ${MARKER}` : base
   const injection_ts = Date.now()
+  const hasClaim = CLAIM_DIR !== "" && CLAIM_ID !== ""
+  // Native push ile yarış: claim'ı alan çalışır. Claim alınamadıysa
+  // (native push düştü) bu enjeksiyon gereksiz — atla.
+  if (hasClaim && !claimWake(CLAIM_DIR, CLAIM_ID)) {
+    console.log(`bg-wake: native push devraldı (${CLAIM_DIR}) — enjeksiyon yok`)
+    return { ok: true, ts: injection_ts, skipped: true }
+  }
   const d = await run(OPENCODE_BIN, ["run", "-s", SESSION, msg], 180000)
   if (d.err) {
     console.error(`bg-wake: enjeksiyon başarısız: ${d.err.message ?? d.err} | stderr: ${d.stderr.slice(0, 300)}`)
+    if (hasClaim) releaseWake(CLAIM_DIR, CLAIM_ID)
     return { ok: false, ts: injection_ts }
   }
   console.log(`bg-wake: injection-attempt: ${NAME} ${state} (CLI kabul — yeni turn garantisi yok)`)
@@ -387,6 +401,13 @@ async function main() {
   }
   const t0 = Date.now()
   for (;;) {
+    // Native push terminal olayda claim yazdıysa aynı olay için iki
+    // yol yarışır; claim enjekte edilmeden alınamadıysa bekçi devralır
+    // (inject() içindeki claim kapısı asıl karar).
+    if (CLAIM_DIR !== "" && CLAIM_ID !== "" && wakeClaimed(CLAIM_DIR, CLAIM_ID)) {
+      console.log(`bg-wake: native push devraldı (${CLAIM_DIR}) — enjeksiyon yok`)
+      return 0
+    }
     if ((Date.now() - t0) / 1000 > MAX_WAIT_SEC) {
       console.error(`bg-wake: bütçe bitti (${MAX_WAIT_SEC}sn), enjeksiyon denemeden çık: ${NAME}`)
       return 2

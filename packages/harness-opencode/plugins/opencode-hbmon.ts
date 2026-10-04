@@ -39,6 +39,7 @@ import { resolveHbmonBin, runHbmon, statusBuild, waitBuild, watchBuild } from "n
 import { HBMON_DISABLED_SENTINEL, HBMON_DISABLED_TEXT } from "nabiz-core/hbmon-disclosure"
 import {
   bgDir,
+  claimWake,
   createOffsetTracker,
   formatCursorReceipt,
   isTerminalState,
@@ -46,8 +47,10 @@ import {
   readLastEvent,
   readOutCursor,
   readOutTail,
+  releaseWake,
   resolveRecord,
   shellArgv,
+  wakeMessage,
   writeRecord,
 } from "nabiz-core/bg-tasks"
 import { formatProgress, readLastProgress } from "nabiz-core/progress"
@@ -75,6 +78,27 @@ interface ToolContext {
 }
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/
+
+/** Native push beklercisi dilimleri: daemon-side bloklu bekleme (polling değil). */
+const WAIT_SLICE_SEC = 50
+/** Native push ömrü — bu süre içinde terminal olmazsa bekçi tek başına kalır. */
+const NATIVE_PUSH_MAX_WAIT_SEC = 4 * 60 * 60
+
+/**
+ * Bekleme yardımcısı — timer UNREF'li: native push beklercisi
+ * boşta beklerken event loop'u tutmaz (opencode çıkışı + node --test
+ * sonrası temiz çıkış; canlı kanıt: sonsuz beklçi yüzünden
+ * test süreci çıkamıyordu).
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => {
+    const t = setTimeout(r, ms)
+    t.unref?.()
+  })
+}
+
+/** Native push hata bütçesi: bu kadar ardışık hata sonra beklerci bırakır. */
+const NATIVE_PUSH_MAX_ERRORS = 3
 
 function systemText(s: unknown): string {
   if (typeof s === "string") return s
@@ -153,6 +177,49 @@ function resolveWakeNodeBin(): string {
   const base = basename(process.execPath)
   if (/^(node|bun|deno)(\.exe)?$/i.test(base)) return process.execPath
   return "node"
+}
+
+/**
+ * Native push beklercisi: `bg_run` anında başlar, hbmon terminal olayını
+ * daemon-side bekler, sonra `session.synthetic` ile AYNI oturuma bildirim
+ * düşürür (inbox kaydı + `execution.wake` = yeni turn).
+ *
+ * Neden ayrıca detached bekçi de var: opencode süreci (TUI kapatma, restart)
+ * görev bitmeden ölürse in-process bekleme de düşer. Bekçi kalıcılık sağlar,
+ * claim marker'ı (`claimWake`) çift bildirimi engeller. Native push claim'ı
+ * sahiplenip başarısız olursa claim'i bırakır → bekçi devralır.
+ */
+async function pushOnSettle(
+  bin: string,
+  task: { uuid: string; sock: string; log: string; name: string; sessionID: string },
+  push: (text: string) => Promise<void>,
+): Promise<void> {
+  const dir = bgDir()
+  const deadline = Date.now() + NATIVE_PUSH_MAX_WAIT_SEC * 1000
+  let errors = 0
+  for (;;) {
+    const slice = Math.max(5, Math.min(WAIT_SLICE_SEC, Math.ceil((deadline - Date.now()) / 1000)))
+    const w = await waitBuild(bin, task.sock, { timeoutSec: slice })
+    // waitBuild yanıtı `unknown`; terminal state alanları daemon JSON'undan.
+    const ev = (w.response ?? {}) as { state?: unknown; code?: unknown }
+    const state = typeof ev.state === "string" ? ev.state : ""
+    const code = typeof ev.code === "number" ? ev.code : undefined
+    if (isTerminalState(state)) {
+      if (!claimWake(dir, task.uuid)) return
+      try {
+        await push(`${wakeMessage(task.name, state, code)} [wake:${task.uuid}]`)
+      } catch (e) {
+        releaseWake(dir, task.uuid)
+        console.error(`nabiz: native push BAŞARISIZ (bekçi devralır): ${e instanceof Error ? e.message : String(e)}`)
+      }
+      return
+    }
+    if (Date.now() >= deadline) return
+    // Daemon öldü/yoksa (hata) sınırsız döngüye girme: bütçe
+    // bıraktık sunucu kapalı demektir — kalıcı bekçi devralır.
+    if (w.error && ++errors >= NATIVE_PUSH_MAX_ERRORS) return
+    if (w.error) await sleep(500)
+  }
 }
 
 const obj = (properties: Record<string, unknown>, required: string[] = []) => ({
@@ -336,7 +403,22 @@ export default Plugin.define({
                 // shim'leri; gerçek runtime her zaman node .exe — Node .cmd'yi
                 // doğrudan spawn edemez, ComSpec DOĞRUDAN spawn edilir).
                 let wakeBin = resolveWakeNodeBin()
-                let wakeArgs = [wake, "--session", sessionID, "--sock", h.sock, "--log", h.log, "--name", args.name]
+                let wakeArgs = [
+                  wake,
+                  "--session",
+                  sessionID,
+                  "--sock",
+                  h.sock,
+                  "--log",
+                  h.log,
+                  "--name",
+                  args.name,
+                  // native push düşürürse bekçi enjeksiyon yapmaz (çift bildirim yok)
+                  "--claim-dir",
+                  dir,
+                  "--claim-uuid",
+                  h.uuid,
+                ]
                 if (process.platform === "win32" && /\.(cmd|bat)$/i.test(wakeBin)) {
                   wakeArgs = ["/d", "/c", wakeBin, ...wakeArgs]
                   wakeBin = process.env.ComSpec ?? "cmd.exe"
@@ -352,7 +434,15 @@ export default Plugin.define({
                 })
                 child.unref()
                 closeSync(outFd)
-                lines.push(`Uyandırma kuruldu: bitince bu oturumda yeni turn açılır.`)
+                // Native yol: süreç ayakta kaldığı sürece in-process bekleme +
+                // session.synthetic (inbox + execution.wake). Bekçi yalnız
+                // kalıcılık yedeği; claim marker'ı ikisini ayırır.
+                void pushOnSettle(bin, { uuid: h.uuid, sock: h.sock, log: h.log, name: args.name, sessionID }, (text) =>
+                  ctx.session.synthetic({ sessionID, text, delivery: "steer" }).then(() => undefined),
+                )
+                lines.push(
+                  `Uyandırma kuruldu: bitince bu oturumda yeni turn açılır (native synthetic + kalıcılık bekçisi).`,
+                )
                 lines.push(`Bekçi logu: ${wakeLog}`)
               } catch {
                 lines.push(`Bekçi kurulamadı (wake atlandı); bg_status ile yokla.`)

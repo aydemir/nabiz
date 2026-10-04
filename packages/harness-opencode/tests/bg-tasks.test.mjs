@@ -7,6 +7,7 @@
  * üzerinden import edilir (pretest: npm run build).
  */
 
+import { spawn } from "node:child_process"
 import test from "node:test"
 import assert from "node:assert/strict"
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
@@ -265,6 +266,71 @@ test("bg disiplini: yanıtlar sıradaki adımı taşır (bm DISCIPLINE_TEXT kar�
     // bg_status: bekleme aracı değil uyarısı (daemon kapalıyken log fallback'i de olabilir)
     const st = String(await runTool("bg_status", { id: "push1" }, {}))
     assert.match(st, /name=push1/)
+  } finally {
+    if (prevDir === undefined) delete process.env.HBMON_BG_DIR
+    else process.env.HBMON_BG_DIR = prevDir
+    if (prevNode === undefined) delete process.env.NABIZ_WAKE_NODE
+    else process.env.NABIZ_WAKE_NODE = prevNode
+  }
+})
+
+test("native push beklercisi süreci tutmaz (unref timer + hata bütçesi)", async () => {
+  // Canlı kanıt: sonsuz döngüye giren pushOnSettle yüzünden test süreci
+  // event loop'tan çıkamıyordu (dosya 35sn yerine asılı kalıyordu).
+  // Çocuk node: `watch`e handshake veren, `wait`te hata veren sahte hbmon;
+  // bg_run gerçekten çalıştırılır, native beklercisi başlar. Çocuk kendi
+  // döngüsünü bitirip KENDİLİĞİNDEN çıkmalı (process.exit yok) — çıkmazsa
+  // test onu öldürür ve kırmızıya döner.
+  const dir = mkdtempSync(join(tmpdir(), "bg-native-"))
+  const prevDir = process.env.HBMON_BG_DIR
+  const prevNode = process.env.NABIZ_WAKE_NODE
+  const handshake = { v: 1, ev: "ready", uuid: "nat1", sock: join(dir, "n.sock"), log: join(dir, "n.jsonl") }
+  const shim = writeNodeShim(
+    dir,
+    "hbmon",
+    `if (process.argv[2] === "watch") console.log(${JSON.stringify(JSON.stringify(handshake))});\nprocess.exit(process.argv[2] === "watch" ? 0 : 1)\n`,
+  )
+  process.env.HBMON_BG_DIR = dir
+  // wake bekçisi gerçek node olmasın (testten kaçıp 4saat beklerdi)
+  process.env.NABIZ_WAKE_NODE = "/bin/echo"
+  try {
+    const pluginEntry = join(import.meta.dirname, "..", "dist", "plugins", "opencode-hbmon.js")
+    const body = `
+const { default: factory } = await import(${JSON.stringify(pluginEntry)})
+const tools = []
+const ctx = {
+  options: { bin: ${JSON.stringify(shim)} },
+  session: { hook: async () => {}, synthetic: async () => {} },
+  tool: { transform: async (cb) => cb({ add: (t) => tools.push(t) }) },
+}
+await factory.setup(ctx)
+const bgRun = tools.find((t) => t.name === "bg_run")
+const res = await bgRun.execute({ name: "nat1", command: "echo hi" }, { sessionID: "ses_n" })
+const text = String(res.content ?? "")
+process.stdout.write(JSON.stringify({ started: text.includes("Uyandırma kuruldu") }))
+// process.exit YOK: event loop kendiliğinden boşalmalı (native beklerci bırakmalı).
+`
+    const script = join(dir, "probe.mjs")
+    writeFileSync(script, body)
+    const res = await new Promise((resolve) => {
+      const child = spawn(process.execPath, [script], { stdio: ["ignore", "pipe", "pipe"] })
+      let out = ""
+      const timer = setTimeout(() => {
+        child.kill()
+        resolve({ code: -1, out })
+      }, 30000)
+      child.stdout.on("data", (c) => (out += c))
+      child.on("exit", (code) => {
+        clearTimeout(timer)
+        resolve({ code, out })
+      })
+    })
+    assert.equal(
+      res.code,
+      0,
+      `probe kendiliğinden çıkmalıydı (native beklerci süreç tutuyor): ${res.out.slice(0, 300)}`,
+    )
+    assert.equal(JSON.parse(res.out).started, true, "bg_run wake kurmuş olmalı")
   } finally {
     if (prevDir === undefined) delete process.env.HBMON_BG_DIR
     else process.env.HBMON_BG_DIR = prevDir

@@ -17,6 +17,7 @@ import {
   readFileSync,
   readSync,
   statSync,
+  unlinkSync,
   writeFileSync,
   type Stats,
 } from "node:fs"
@@ -245,6 +246,46 @@ export function outFromSock(sock: string): string {
 export function wakeMessage(name: string, state: string, code: number | undefined): string {
   const c = code === undefined ? "?" : String(code)
   return `[bg] ${name} → ${state} (exit ${c}). bg_status/bg_logs ile detaya bak.`
+}
+
+/**
+ * Push claim marker dosyası — native (plugin içi `session.synthetic`) ve
+ * detached bekçi (`scripts/bg-wake.mjs`) yollarının yarış çözücüsü.
+ *
+ * İki yol da aynı terminal olayında uyanır; iddialar `wx` ile atomik
+ * yazılır, yalnız biri sahiplenir → çift bildirim olmaz. Native push
+ * başarısız olursa claim bırakılır, bekçi devralır (at-least-once).
+ */
+export function wakeClaimPath(dir: string, uuid: string): string {
+  return join(dir, `bg-${uuid}.wake.claim`)
+}
+
+/** Claim sahiplenildiyse true; diğer yol (native/bekçi) sahiplendiyse false. */
+export function claimWake(dir: string, uuid: string): boolean {
+  try {
+    closeSync(openSync(wakeClaimPath(dir, uuid), "wx"))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Push başarısız olduysa claim bırakılır — detached bekçi devralsın. */
+export function releaseWake(dir: string, uuid: string): void {
+  try {
+    unlinkSync(wakeClaimPath(dir, uuid))
+  } catch {
+    /* zaten yok */
+  }
+}
+
+/** Bekçi tarafı: claim dosyası varsa native push dütmüş, atla. */
+export function wakeClaimed(dir: string, uuid: string): boolean {
+  try {
+    return statSync(wakeClaimPath(dir, uuid)).isFile()
+  } catch {
+    return false
+  }
 }
 
 export interface LogEvent {
