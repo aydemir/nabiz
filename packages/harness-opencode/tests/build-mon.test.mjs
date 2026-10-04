@@ -110,7 +110,7 @@ test(
     )
     assert.equal(r.exit, 124)
     assert.ok(r.stdout.includes("TIMED_OUT"))
-    assert.ok(ls(d).some((f) => /^t7\.log\.timed_out-/.test(f)))
+    assert.ok(ls(d).some((f) => f.startsWith("t7.log.timed_out-")))
   },
   { timeout: 60000 },
 )
@@ -222,7 +222,7 @@ test(
     const status = JSON.parse(readFileSync(join(d, "tk.status.json"), "utf8"))
     assert.equal(status.event, "STALLED")
     assert.equal(status.exit, 111)
-    assert.ok(ls(d).some((f) => /^tk\.log\.stalled-/.test(f)))
+    assert.ok(ls(d).some((f) => f.startsWith("tk.log.stalled-")))
   },
   { timeout: 90000 },
 )
@@ -266,7 +266,7 @@ test(
       } else {
         assert.equal(code, 143)
         assert.ok(evs.includes("INTERRUPTED"))
-        assert.ok(ls(d).some((f) => /^ti\.log\.interrupted-/.test(f)))
+        assert.ok(ls(d).some((f) => f.startsWith("ti.log.interrupted-")))
         // Ağaç gerçekten öldü mü (TERM yarışına karşı deadline'lı bekle).
         await waitFor(() => {
           try {

@@ -529,8 +529,10 @@ async function adoptOrphans(pi: ExtensionAPI, reg?: Map<string, RegistryEntry>):
     let cmd = "unknown (adopted)"
     let startedAt = Date.now()
     try {
-      const first = fs
-        .readFileSync(log, "utf-8")
+      // `fs.` burada yalnizca ad alanini bulmadi: readFileSync zaten named
+      // import. Bu yol try/catch icinde oldugu icin hata sessizce yutulur ve
+      // adopt edilen ise "unknown (adopted)" olarak kaybolurdu.
+      const first = readFileSync(log, "utf-8")
         .split("\n")
         .map((s) => s.trim())
         .filter(Boolean)[0]

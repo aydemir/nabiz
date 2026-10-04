@@ -62,3 +62,7 @@ same handshake, same `woke_on` summaries, same exit mapping
 (0 done / 1 failed / 2 dep-missing / 124 timeout / 137 oom / 3 internal).
 `tsc --noEmit` clean for `extensions/` (against `nabiz-core` sources);
 live daemon smoke for `bg_*` (cursor / registry / `wait_ms`).
+
+Gates: `npm run lint` (oxlint, whole repo), `npm run typecheck:ext` +
+`npm run check:pi` (pi 1.0.x compatibility), `npm test` inside
+`packages/harness-opencode` (or `npm run test:lowmem` from the root).

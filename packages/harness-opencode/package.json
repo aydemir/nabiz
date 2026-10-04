@@ -9,10 +9,11 @@
     "directory": "packages/harness-opencode"
   },
   "scripts": {
-    "build": "tsc --project tsconfig.json",
+    "build": "node --max-old-space-size=1024 ../../node_modules/typescript/bin/tsc --project tsconfig.json",
     "setup": "node scripts/setup.mjs",
     "pretest": "npm run build",
     "test": "node --test --test-reporter=spec",
+    "test:lowmem": "node --test --test-concurrency=1 --test-reporter=spec",
     "lint": "tsc --noEmit"
   },
   "keywords": [

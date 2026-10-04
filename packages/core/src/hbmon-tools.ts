@@ -150,7 +150,13 @@ export interface WaitResult {
 export async function waitBuild(
   bin: string,
   sock: string,
-  opts: { timeoutSec?: number; until?: string; env?: NodeJS.ProcessEnv; startupGraceMs?: number; signal?: AbortSignal } = {},
+  opts: {
+    timeoutSec?: number
+    until?: string
+    env?: NodeJS.ProcessEnv
+    startupGraceMs?: number
+    signal?: AbortSignal
+  } = {},
 ): Promise<WaitResult> {
   const daemonTimeout = opts.timeoutSec ?? 50
   const args = ["wait", "--sock", sock, "--timeout", String(daemonTimeout)]

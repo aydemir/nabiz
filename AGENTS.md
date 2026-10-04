@@ -6,11 +6,20 @@ uyarlanmış halidir; çelişki yok, yalnızca toolchain farkı var.
 
 ## Komutlar (kökten)
 
-- `npm run build` — tüm workspace'leri derler (`tsc`, `dist/`).
+- `npm run build` — tüm workspace'leri derler (`tsc`, `dist/`; her `tsc`
+  çağrısı `node --max-old-space-size=1024` altında çalışır).
 - `npm run format` / `format:check` — prettier (`semi: false`, `printWidth: 120`).
-- `npm run lint` — oxlint (0 warning hedefi).
-- Testler kökten koşmaz; paket dizininden: `node --test tests/*.test.mjs`
-  (`scripts/bg-wake.mjs` göreli yolu paket cwd'si ister).
+- `npm run lint` — oxlint, tüm repo (`oxlint .`, 0 warning hedefi).
+- `npm run typecheck:ext` — `extensions/` için `tsc --noEmit`
+  (pi 1.0.x tiplerine karşı; `tsconfig.extensions.json`).
+- `npm run check:pi` — pi uyumluluk kapısı: extension'ları pi'nin kendi
+  jiti'siyle yükler, tool/komut sözleşmesini doğrular
+  (`scripts/check-pi-ext.mjs`).
+- `npm run test:lowmem` — opencode paketinin testleri, sıralı
+  (`--test-concurrency=1`); `npm test` paket içinden paralel koşar.
+- Testler kökten koşmaz; paket dizininden `npm test`
+  (`node --test --test-reporter=spec`; `scripts/bg-wake.mjs` göreli yolu
+  paket cwd'si ister).
 
 ## Stil
 

@@ -113,10 +113,7 @@ test("tool-context: bg_run sessionID'yi kayda yazar (mevcut davranış)", async 
     assert.ok(bgRun, "bg_run registered")
     // bg_run execute(input, context) — context.sessionID okunur
     // Not: gerçek hbmon daemon gerekmez; watchBuild başarısız olursa error döner
-    const result = await bgRun.execute(
-      { name: "test-task", command: "echo hello", notify: false },
-      fullCtx,
-    )
+    const result = await bgRun.execute({ name: "test-task", command: "echo hello", notify: false }, fullCtx)
     assert.ok(result, "result döndü")
     assert.ok(typeof textOf(result.content) === "string", "content string")
   } finally {

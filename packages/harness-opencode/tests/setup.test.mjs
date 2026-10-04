@@ -122,7 +122,10 @@ test("computePlan: V1 düz mcp.nabiz girdisi iç içe normalleştirilir (idempot
   const cfg = { mcp: { [MCP_KEY]: { type: "local", command: cmd, enabled: true } } }
   const first = computePlan(cfg, ROOT)
   assert.equal(first.dirty, true)
-  assert.ok(first.changes.some((c) => c.includes("V1 düz")), "normalleştirme bildirilir")
+  assert.ok(
+    first.changes.some((c) => c.includes("V1 düz")),
+    "normalleştirme bildirilir",
+  )
   assert.ok(!(MCP_KEY in first.next.mcp), "düz giriş silinir")
   assert.deepEqual(first.next.mcp.servers[MCP_KEY], { type: "local", command: cmd })
   // İkinci pass temiz: uygulanmış plan idempotent.

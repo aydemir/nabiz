@@ -62,3 +62,7 @@ aynı handshake, aynı `woke_on` özetleri, aynı exit eşlemesi
 (0 done / 1 failed / 2 dep-missing / 124 timeout / 137 oom / 3 internal).
 `extensions/` için `tsc --noEmit` temiz (`nabiz-core` kaynaklarına karşı);
 `bg_*` için canlı daemon smoke (cursor / registry / `wait_ms`).
+
+Kapılar: `npm run lint` (oxlint, tüm repo), `npm run typecheck:ext` +
+`npm run check:pi` (pi 1.0.x uyumluluğu), `packages/harness-opencode` içinden
+`npm test` (kökten düşük bellekli koşum: `npm run test:lowmem`).

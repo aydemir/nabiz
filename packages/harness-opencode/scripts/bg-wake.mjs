@@ -134,7 +134,9 @@ function run(file, a, timeoutMs) {
       child.on("close", (code, signal) => {
         if (timer) clearTimeout(timer)
         const err =
-          code === 0 ? null : new Error(`Command failed: ${file} ${a.join(" ")} (code ${code}, signal ${signal ?? "?"})`)
+          code === 0
+            ? null
+            : new Error(`Command failed: ${file} ${a.join(" ")} (code ${code}, signal ${signal ?? "?"})`)
         settle(err)
       })
     }
