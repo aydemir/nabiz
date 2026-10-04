@@ -1,6 +1,6 @@
 {
   "name": "@nabiz/mcp-bash-tools",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "MCP server: nabiz_safe (auto-pruned) + nabiz_raw (full output) for opencode. Schema-controlled bypass.",

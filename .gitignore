@@ -4,3 +4,4 @@ packages/*/node_modules/
 packages/*/plugins/*/dist/
 *.log
 .opencode/
+release/

@@ -17,7 +17,7 @@ import { writeSync } from "node:fs"
 
 const SERVER_INFO = {
   name: "nabiz",
-  version: "0.1.0",
+  version: "1.0.0",
 }
 
 const PROTOCOL_VERSION = "2024-11-05"

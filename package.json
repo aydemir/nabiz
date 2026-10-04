@@ -1,12 +1,22 @@
 {
   "name": "nabiz",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Keeps the pulse of long-running work: build tracking, background tasks, notifications",
   "type": "module",
   "keywords": [
     "pi-package"
   ],
   "license": "MIT",
+  "files": [
+    "extensions",
+    "assets",
+    "scripts",
+    "docs",
+    "README.md",
+    "README.tr.md",
+    "AGENTS.md",
+    ".mcp.json"
+  ],
   "prettier": {
     "semi": false,
     "printWidth": 120
