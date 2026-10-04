@@ -16,7 +16,7 @@
     "nabiz": {
       "command": "node",
       "args": [
-        "/root/nabiz/packages/harness-opencode/dist/plugins/mcp-bash-tools/src/server.js"
+        "/root/.local/share/nabiz/node_modules/nabiz-opencode/dist/plugins/mcp-bash-tools/src/server.js"
       ]
     }
   }
