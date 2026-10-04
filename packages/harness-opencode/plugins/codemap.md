@@ -6,6 +6,9 @@ bash-tools sunucusu. Tek giriş noktası `../plugin/index.ts` (bundle, id `nabiz
 
 ## Design
 - `opencode-hbmon.ts` — 7 tool (`hbmon_watch/wait/status`, `bg_run/status/logs/kill`),
+  terminal bildirimi **native**: `pushOnSettle` → `session.synthetic`
+  (inbox + `execution.wake`); `bg-wake.mjs` yalnız kalıcılık yedeği, ikisi
+  `claimWake` marker'ıyla ayrılır. `bg_logs(wait_ms)` bloklayan okuma.
   hepsi `options.namespace: "build_pulse"` (host kuralı: segment `^[A-Za-z0-9_-]{1,64}$`).
 - `opencode-context-saver.ts` — `session.hook("context")` + `tool.execute.before/after`
   ile bağlam kırpması; `session.hook("prompt")` boş kanca.

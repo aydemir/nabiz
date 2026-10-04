@@ -10,6 +10,8 @@ Kurulum + bekçi script'leri (canlı config ve build izleme; testler değil).
   `mcp.servers`'a taşıma, yabancı girdiye dokunmama.
 - `check-dist.mjs` — core `src`/`dist` mtime karşılaştırması (bayatsa exit 1).
 - `bg-wake.mjs` — bg bitince `opencode run` ile aynı oturumu uyandıran bekçi.
+  Artık **yedek**: native `session.synthetic` düştüyse `--claim-dir/--claim-uuid`
+  ile enjeksiyonu atlar; claim yoksa (süreç öldü / native push başarısız) devralır.
 - `build-mon.mjs`, `hbmon-build-mon.mjs` — build izleme yardımcıları.
 - `cpu-liveness-probe/`, `timeout-kill-probe/` — izole prob dizinleri.
 
