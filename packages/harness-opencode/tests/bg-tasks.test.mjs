@@ -222,6 +222,57 @@ test("bg_logs cursor: makbuz + tekrar uyarısı + tail regresyonu (daemon yok)",
   }
 })
 
+test("bg disiplini: yanıtlar sıradaki adımı taşır (bm DISCIPLINE_TEXT karşılığı)", async () => {
+  // bm (`opencode-bm`) MCP'i söküldü; disiplin opencode yüzeyinde yanıta
+  // konur. Push açıkken "poll yapma + final öncesi topla", notify:false iken
+  // "bildirim yok + seyrek yokla" yönlendirmesi beklenir.
+  const dir = mkdtempSync(join(tmpdir(), "bg-"))
+  const prevDir = process.env.HBMON_BG_DIR
+  const prevNode = process.env.NABIZ_WAKE_NODE
+  const handshake = { v: 1, ev: "ready", uuid: "disc1", sock: join(dir, "d.sock"), log: join(dir, "d.jsonl") }
+  const shim = writeNodeShim(
+    dir,
+    "hbmon",
+    `if (process.argv[2] === "watch") console.log(${JSON.stringify(JSON.stringify(handshake))});\nprocess.exit(0)\n`,
+  )
+  process.env.HBMON_BG_DIR = dir
+  process.env.NABIZ_WAKE_NODE = "/bin/echo"
+  try {
+    const { addedTools } = await setupV2(hbmonFactory, { bin: shim })
+    const runTool = async (name, input, ctx) =>
+      textOf((await addedTools.find((t) => t.name === name).execute(input, ctx)).content)
+
+    const pushed = String(await runTool("bg_run", { name: "push1", command: "echo hi" }, { sessionID: "ses_d" }))
+    assert.match(pushed, /Uyandırma kuruldu/)
+    assert.match(pushed, /poll\/sleep YAPMA/)
+    assert.match(pushed, /Final cevaptan önce hâlâ ilgili görevleri `bg_logs`/)
+
+    const manual = String(
+      await runTool("bg_run", { name: "no1", command: "echo hi", notify: false }, { sessionID: "ses_d" }),
+    )
+    assert.ok(!manual.includes("poll/sleep YAPMA"), "notify:false push yönlendirmesi almaz")
+    assert.match(manual, /uyandırma kurulmadı, bildirim gelmeyecek/)
+    assert.match(manual, /Final cevaptan önce/)
+
+    // bg_logs tail modu: artımlı okuma + toplama hatırlatması
+    const out = join(dir, "d.out")
+    writeFileSync(out, "satir1\nsatir2\n")
+    writeRecord(dir, rec({ name: "push1", uuid: "disc1", out, sock: handshake.sock, log: handshake.log }))
+    const logs = String(await runTool("bg_logs", { id: "push1" }, {}))
+    assert.match(logs, /satir1/)
+    assert.match(logs, /bir sonraki `next_offset` değerini kullan/)
+
+    // bg_status: bekleme aracı değil uyarısı (daemon kapalıyken log fallback'i de olabilir)
+    const st = String(await runTool("bg_status", { id: "push1" }, {}))
+    assert.match(st, /name=push1/)
+  } finally {
+    if (prevDir === undefined) delete process.env.HBMON_BG_DIR
+    else process.env.HBMON_BG_DIR = prevDir
+    if (prevNode === undefined) delete process.env.NABIZ_WAKE_NODE
+    else process.env.NABIZ_WAKE_NODE = prevNode
+  }
+})
+
 test("outFromSock + wakeMessage", () => {
   assert.equal(outFromSock("/tmp/hbmon-a.sock"), "/tmp/hbmon-a.out")
   assert.match(wakeMessage("derle", "done", 0), /\[bg\] derle → done \(exit 0\)/)

@@ -24,6 +24,10 @@
  * Faz 8: ToolContext (sessionID, agent, messageID, id, signal, progress)
  * tüm 7 tool'a bağlandı. signal → hbmon_wait/hbmon_status iptal;
  * progress → hbmon_wait ara-durum bildirimi. namespace "build_pulse".
+ *
+ * Disiplin: bm (`opencode-bm`) MCP'i söküldüğü için `DISCIPLINE_TEXT`'in
+ * opencode karşılığı yanıtlara konur (BG_* sabitleri) — pi tarafındaki
+ * karşılık `extensions/bg-hbmon.ts` `promptGuidelines`/`completionGuidance`.
  */
 
 import { Plugin } from "@opencode/plugin"
@@ -114,6 +118,26 @@ function resolveWakeScript(configured: unknown, moduleUrl: string): string {
 
 /** NABIZ-001 tekrar tespiti: istenen offset, task başına (bellekte; NABIZ-002'ye kadar). */
 const offsetTracker = createOffsetTracker()
+
+/**
+ * bg_* disiplin metni — `opencode-bm` `DISCIPLINE_TEXT` karşılığı
+ * (`mcp.bm` Faz 5'te söküldü, `docs/migration-plan.md`; bu yüzey devraldı).
+ *
+ * bm'de metin hem tool açıklamasına hem her yanıta gömülüyordu. opencode'da
+ * `promptGuidelines` yok (pi API'si) ve push kanalı zaten var (bg-wake +
+ * settle-noticer) — bu yüzden "busy-poll yapma" tekrarı yerine sıradaki adım
+ * yanıta konur: bekleme bildirimle gelir, yoksa seyrek yoklama gerekir.
+ * pi tarafındaki karşılık `extensions/bg-hbmon.ts` `promptGuidelines` +
+ * `completionGuidance` (orada `wait_ms` bloklaması da var).
+ */
+const BG_NEXT_PUSH =
+  "Sıradaki adım: poll/sleep YAPMA. Bağımsız işin varsa onu yap, yoksa turn'ü bitir — terminal durumda aynı oturumda yeni turn açılır."
+const BG_NEXT_MANUAL =
+  "Sıradaki adım: uyandırma kurulmadı, bildirim gelmeyecek; bekleme aracı da yok (pi'deki `wait_ms` eşdeğeri bu yüzeyde bulunmuyor) — seyrek `bg_status`/`bg_logs` ile kontrol et."
+const BG_COLLECT =
+  "Final cevaptan önce hâlâ ilgili görevleri `bg_logs` (offset) ile topla; ilgisi kalmayanı `bg_kill` ile durdur."
+const BG_STATUS_NOTE = "Anlık görüntü — bekleme aracı değil; bildirim gelene kadar döngü kurma."
+const BG_LOGS_NEXT = "Yeni çıktı için bir sonraki `next_offset` değerini kullan; aynı offset'i tekrar çağırma."
 
 /**
  * Bekçi scriptini koşturacak JS runtime'ı.
@@ -338,6 +362,7 @@ export default Plugin.define({
             } else {
               lines.push(`notify:false — uyandırma yok; bg_status ile yokla.`)
             }
+            lines.push(notify && sessionID !== "" ? BG_NEXT_PUSH : BG_NEXT_MANUAL, BG_COLLECT)
             return { content: lines.join("\n") }
           },
         }),
@@ -346,7 +371,8 @@ export default Plugin.define({
       editor.add(
         adaptToolInfo({
           name: "bg_status",
-          description: "Arka plan görevinin anlık özeti (compact). Beklemez. id: name veya uuid-prefix.",
+          description:
+            "Arka plan görevinin anlık özeti (compact). Beklemez ve bekleme aracı değildir — terminal bildirimi bekleniyorsa tekrar çağırma. id: name veya uuid-prefix.",
           input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
           options: { namespace: "build_pulse" },
           async execute(input, context) {
@@ -369,7 +395,7 @@ export default Plugin.define({
               }
               return { content: `bg_status name=${r.record.name} BAŞARISIZ: ${s.error}` }
             }
-            return { content: `name=${r.record.name} ${JSON.stringify(s.response)}` }
+            return { content: `name=${r.record.name} ${JSON.stringify(s.response)}\n${BG_STATUS_NOTE}` }
           },
         }),
       )
@@ -378,7 +404,7 @@ export default Plugin.define({
         adaptToolInfo({
           name: "bg_logs",
           description:
-            "Arka plan görevinin stdout kuyruğu (.out tail, tail modunda max 512KB). id: name veya uuid-prefix. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür. Cursor (offsetli) modda tavan 50KB — üstü kırpılır, receipt'te capped ile bildirilir.",
+            "Arka plan görevinin stdout kuyruğu (.out tail, tail modunda max 512KB). id: name veya uuid-prefix. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür. Cursor (offsetli) modda tavan 50KB — üstü kırpılır, receipt'te capped ile bildirilir. Bloklayan bekleme YOKTUR (pi'deki `wait_ms` eşdeğeri yok) — bitmeyi bekçi bildirimi getirir, döngü kurma.",
           input: obj(
             {
               id: str("Görev name veya uuid-prefix (bg_run'dan döner)"),
@@ -399,7 +425,9 @@ export default Plugin.define({
             if (args.offset === undefined) {
               const tail = Math.min(Math.max(args.tail_bytes ?? 50 * 1024, 1), 512 * 1024)
               const out = readOutTail(r.record.out, tail)
-              return { content: `[${r.record.name} .out${out.truncated ? " (TRUNCATED, kuyruk)" : ""}]\n${out.text}` }
+              return {
+                content: `[${r.record.name} .out${out.truncated ? " (TRUNCATED, kuyruk)" : ""}]\n${out.text}\n${BG_LOGS_NEXT}\n${BG_COLLECT}`,
+              }
             }
             const repeat = offsetTracker.note(r.record.uuid, args.offset)
             const cur = readOutCursor(r.record.out, args.offset, args.tail_bytes ?? 50 * 1024)
