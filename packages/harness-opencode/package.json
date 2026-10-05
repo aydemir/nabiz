@@ -24,7 +24,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@opencode/plugin": "2.0.22",
+    "@opencode/plugin": "2.0.23",
     "nabiz-core": "*"
   },
   "engines": {
