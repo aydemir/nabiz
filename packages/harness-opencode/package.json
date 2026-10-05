@@ -1,6 +1,6 @@
 {
   "name": "nabiz-opencode",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "nabiz opencode adaptoru: context-saver, build-tracker, truncation-noticer, cpu-liveness, settle-noticer, hbmon, updater (tek server girisi) + MCP bash-tools",
   "repository": {
