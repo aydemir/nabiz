@@ -7,12 +7,6 @@
         "--mcp"
       ]
     },
-    "bm": {
-      "command": "node",
-      "args": [
-        "/root/opencode-bm/dist/server.js"
-      ]
-    },
     "nabiz": {
       "command": "node",
       "args": [
