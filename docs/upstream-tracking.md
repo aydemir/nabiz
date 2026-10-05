@@ -113,12 +113,14 @@ o zaman bu bölümü güncelle.
 
 Mevcut kurulum (2026-10-05):
 
-- config `~/.config/opencode/opencode.jsonc` → `"package": "/root/.local/share/nabiz/node_modules/nabiz-opencode/plugin"` — **mutlak yol**
-- `npm view nabiz-opencode` → **E404** (registry'de yok)
-- kurulum registry değil: `~/.local/share/nabiz/package.json` (`nabiz-install`, private) → `"nabiz-opencode": "file:vendor/nabiz-opencode-1.0.0.tgz"`
+- config `~/.config/opencode/opencode.jsonc` → `"package": "/root/.local/share/nabiz/node_modules/nabiz-opencode/plugin"` — **hâlâ mutlak yol**
+- `npm view nabiz-opencode` → **1.0.0** · `npm view nabiz-core` → **1.0.0**
+  (2026-10-05'te yayınlandı; hesapta `auth-and-writes` 2FA, publish `--otp` ister)
+- **aktif kurulum registry değil**: `~/.local/share/nabiz/package.json`
+  (`nabiz-install`, private) → `"nabiz-opencode": "file:vendor/nabiz-opencode-1.0.0.tgz"`
 
-⇒ **upstream `ctrl+r` nabız'ı görmez, listede bile görünmez.** Bu bir arıza
-değil; 1. bölümün kapsam kısıtının doğrudan sonucu.
+⇒ Paketler registry'de ama config henüz çevrilmediği için **aktif kurulum hâlâ
+upstream `ctrl+r`'ın görüş alanı dışında.** Aşağıdaki config geçişi yapılınca B tamamlanır.
 
 Karar (2026-10-05): **C → B**
 
@@ -126,10 +128,23 @@ Karar (2026-10-05): **C → B**
   (saf mantık) + `packages/harness-opencode/plugins/opencode-nabiz-updater.ts`
   (ince katman). Mevcut `file:` kurulumuna dokunmaz, upstream'e bağımlı değildir.
 - **B** — `npm publish` + config `"package": "nabiz-opencode@latest"`. Upstream
-  updater'ı doğrudan çalışır. **Karar öncesi koşul:** paket herkese açık
-  registry'ye yayınlanır (isim şu an boş) — geri alınması zor.
+  updater'ı doğrudan çalışır. **Ön koşul 2026-10-05'te sağlandı:** iki paket de
+  herkese açık registry'ye yayınlandı. **Sıra önemliydi:** önce `nabiz-core@1.0.0`,
+  sonra `nabiz-opencode@1.0.0` (opencode core'a bağımlı; core yoksa opencode
+  kırık kurulur). **Kalan tek adım:** config'i `nabiz-opencode@latest`e çevirmek.
 
-C, B'ye geçildiğinde değişmez: zaten registry'ye bakar.
+**Yayın tuzağı — `exports` (2026-10-05, canlı kurulumla doğrulandı):**
+`Host.resolve` (`packages/plugin/src/host.ts:43`) sunucu girişini
+`entry(["server", ""])` ile **önce `./server`'a** dener. `exports["./server"]`
+`dist/plugins/server.js`'i gösterirse orası bir **barrel** — `export default`
+yok, sadece `export { default as x }` — ve `core/src/plugin/module.ts:107`
+default export zorunlu kıldığı için yükleme **başarısız** olurdu. Doğru hedef
+`dist/plugin/index.js` (`export default Plugin.define(...)` olan dosya). Bugün
+config dizin yolu verdiği için `path.resolve(dir, "index")` ile o dosyaya
+ulaşıyordu; registry'ye geçince bu yol **değişir**. `exports` bu yüzden
+`{".": "./dist/plugin/index.js", "./server": "./dist/plugin/index.js"}` olmalı.
+Ayrıca `"nabiz-core": "*"` → `"^1.0.0"`: `*` registry'de yayınlanmadan
+boşta bir bağımlılık bırakıyordu.
 
 **Git-spec (A) seçilmedi:** `ignoreScripts` + `dist/`'in gitignored olması
 (`.gitignore:2 packages/*/dist/`, `git ls-files .../dist` → 0 dosya) →
