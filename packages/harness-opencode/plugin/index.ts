@@ -24,11 +24,20 @@ import buildTracker from "../plugins/opencode-build-tracker.js"
 import contextSaver from "../plugins/opencode-context-saver.js"
 import cpuLiveness from "../plugins/opencode-cpu-liveness.js"
 import hbmon from "../plugins/opencode-hbmon.js"
+import nabizUpdater from "../plugins/opencode-nabiz-updater.js"
 import settleNoticer from "../plugins/opencode-settle-noticer.js"
 import truncationNoticer from "../plugins/opencode-truncation-noticer.js"
 
 // Discovery sırasıyla aynı (alfabetik): prune → noticer'lar.
-const SUB_PLUGINS = [buildTracker, contextSaver, cpuLiveness, hbmon, settleNoticer, truncationNoticer] as const
+const SUB_PLUGINS = [
+  buildTracker,
+  contextSaver,
+  cpuLiveness,
+  hbmon,
+  nabizUpdater,
+  settleNoticer,
+  truncationNoticer,
+] as const
 
 const NS_KEYS = new Set(SUB_PLUGINS.map((s) => s.id))
 

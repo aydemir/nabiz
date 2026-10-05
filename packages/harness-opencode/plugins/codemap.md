@@ -1,7 +1,7 @@
 # packages/harness-opencode/plugins/
 
 ## Responsibility
-Altı V2 opencode plugin'i (`export default Plugin.define(...)`) + MCP
+Yedi V2 opencode plugin'i (`export default Plugin.define(...)`) + MCP
 bash-tools sunucusu. Tek giriş noktası `../plugin/index.ts` (bundle, id `nabiz`).
 
 ## Design
@@ -16,6 +16,10 @@ bash-tools sunucusu. Tek giriş noktası `../plugin/index.ts` (bundle, id `nabiz
 - `opencode-truncation-noticer.ts`, `opencode-settle-noticer.ts` — kesilme
   bildirimi + next-contact yerleşimi.
 - `opencode-cpu-liveness.ts` — CPU stall gözcüsü (yalnız `session.hook("context")`).
+- `opencode-nabiz-updater.ts` — nabız'ın kendi sürüm bildirimi. Upstream `ctrl+r`
+  yerel `file:` kurulumunu görmez (`docs/upstream-tracking.md` §1); burada saf
+  mantık `nabiz-core/updater-notice`, ağ katmanı enjekte, sentinel idempotent.
+  Hiçbir şey kurmaz, yalnız haber verir.
 - `server.ts` — re-export barrel (plugin değil).
 - `lib/opencode-compat.ts` — host varsayım tamponu (ad/namespace
   regexleri, hook adları, izin sözlüğü; `adaptToolInfo` kayıt anında
@@ -24,7 +28,7 @@ bash-tools sunucusu. Tek giriş noktası `../plugin/index.ts` (bundle, id `nabiz
   (`safe`/`raw` → LLM'de `nabiz_safe`/`nabiz_raw`); `src/exec.ts` çalıştırma çekirdeği.
 
 ## Flow
-1. Host dizini yükler → `plugin/index.ts` altı setup'ı alfabetik sırayla koşturur.
+1. Host dizini yükler → `plugin/index.ts` yedi setup'ı alfabetik sırayla koşturur.
 2. Tool çağrısı → core motoru → `{ content }` sonucu.
 3. MCP yolu bağımsızdır: `dist/plugins/mcp-bash-tools/src/server.js` ayrı süreç.
 

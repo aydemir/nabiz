@@ -10,8 +10,8 @@ Part of [`aydemir/nabiz`](https://github.com/aydemir/nabiz).
 
 `opencode-context-saver`, `opencode-build-tracker`,
 `opencode-truncation-noticer`, `opencode-cpu-liveness`,
-`opencode-settle-noticer`, `opencode-hbmon` — plus MCP server
-`mcp-bash-tools` (`nabiz_safe` / `nabiz_raw`).
+`opencode-settle-noticer`, `opencode-hbmon`, `opencode-nabiz-updater`
+— plus MCP server `mcp-bash-tools` (`nabiz_safe` / `nabiz_raw`).
 
 V2 gerçeği: `plugins` config girdisi DOSYA kabul etmez
 ("configured plugin path must be a directory"); bir dizinden SADECE

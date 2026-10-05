@@ -17,7 +17,8 @@
     "./prune": "./dist/prune.js",
     "./raw-refill": "./dist/raw-refill.js",
     "./settle-notice": "./dist/settle-notice.js",
-    "./truncation-notice": "./dist/truncation-notice.js"
+    "./truncation-notice": "./dist/truncation-notice.js",
+    "./updater-notice": "./dist/updater-notice.js"
   },
   "files": [
     "dist",
