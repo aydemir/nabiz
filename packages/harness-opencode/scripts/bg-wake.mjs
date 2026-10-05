@@ -70,6 +70,15 @@ const ATTEMPT_LOG = get("--attempt-log", SOCK.endsWith(".sock") ? SOCK.slice(0, 
 // push başarısız oldu (claim bırakıldı) ya da süreç öldü → bekçi devralır.
 const CLAIM_DIR = get("--claim-dir", "")
 const CLAIM_ID = get("--claim-uuid", "")
+// Native push grace penceresi: terminal olayda iki yol aynı anda öğrenir
+// (ikisi de bloklu `hbmon wait` bekliyordu) ve claim'a yarışır. Ölçüldü:
+// 4 koşuda bekçi 3, native 1 kazandı — yani bekçi kazanınca bildirim
+// `session.synthetic` notice'i değil, `opencode run` prompt'u olarak düşüyor.
+// Bekçi claim'den önce bu pencere boyunca claim'ı yokluyor: native yol
+// çalışıyorsa birkaç ms içinde alır ve TUI notice'i devralır; çalışmıyorsa
+// (süreç öldü / push başarısız) pencere bitince bekçi yine devralır, yalnız
+// NATIVE_GRACE_MS kadar gecikir.
+const NATIVE_GRACE_MS = num(get("--native-grace-ms", "1500"), 1500)
 // (1) retry'lar aynı marker/taskId semantiğini korur: denemeler JSONL'deki
 // injection_ts'lerle, turn'ler created zamanlarıyla ayrışır.
 const MARKER = TASK_ID ? `[wake:${TASK_ID}]` : ""
@@ -207,6 +216,30 @@ function logAttempt(rec) {
   } catch {
     /* best-effort */
   }
+}
+
+/**
+ * Terminal olay anında: hangi yolun devraldığını logla, native push'a claim
+ * şansı ver. `true` dönerse native claim'ı almıştır → bekçi enjeksiyon yapmaz.
+ *
+ * Log koşulsuz: claim yapılandırması olsa da olmasa da terminal satırı düşer
+ * (ölçüldü: başarılı enjeksiyonda bile wake log boş kalıyordu, teşhis 3 tur
+ * sürdü).
+ */
+async function nativeClaimWins(state, code) {
+  const grace = CLAIM_DIR === "" || CLAIM_ID === "" ? 0 : NATIVE_GRACE_MS
+  console.log(
+    `bg-wake: terminal ${state} code=${code ?? "?"}${grace > 0 ? ` — native grace ${grace}ms bekleniyor` : " (claim yok, doğrudan enjeksiyon)"}`,
+  )
+  const deadline = Date.now() + grace
+  while (Date.now() < deadline) {
+    if (wakeClaimed(CLAIM_DIR, CLAIM_ID)) {
+      console.log(`bg-wake: native push devraldı (${CLAIM_DIR}) — enjeksiyon yok`)
+      return true
+    }
+    await sleep(Math.min(50, Math.max(1, deadline - Date.now())))
+  }
+  return false
 }
 
 async function inject(state, code) {
@@ -415,6 +448,7 @@ async function main() {
     // 1) jsonl birincil: daemon/monitorsiz de terminal state verir.
     const ev = lastLogEvent()
     if (ev && TERMINAL.has(ev.state)) {
+      if (await nativeClaimWins(ev.state, ev.code)) return 0
       if (TASK_ID) return await verifyLoop(ev.state, ev.code)
       return (await inject(ev.state, ev.code)).ok ? 0 : 1
     }
@@ -422,6 +456,7 @@ async function main() {
     const r = await run(BIN, ["wait", "--sock", SOCK, "--timeout", String(WAIT_SEC)], (WAIT_SEC + 60) * 1000)
     const j = lastState(r.stdout)
     if (j && !j.timeout && TERMINAL.has(j.state)) {
+      if (await nativeClaimWins(j.state, j.code)) return 0
       if (TASK_ID) return await verifyLoop(j.state, j.code)
       return (await inject(j.state, j.code)).ok ? 0 : 1
     }

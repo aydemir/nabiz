@@ -10,7 +10,7 @@ destekli uzun-build takibiyle.
 - `packages/harness-opencode/scripts/setup.mjs` — canlı config kurulumu.
 - `packages/core/src/hbmon-tools.ts` — daemon istemci motoru.
 - `packages/harness-opencode/plugins/opencode-hbmon.ts` — 7 tool
-  (`hbmon_*`, `bg_*`, namespace `build_pulse`).
+  (`hbmon_*`, `bg_*`, namespace `nabiz`).
 - `extensions/hbmon.ts` + `extensions/bg-hbmon.ts` — pi yüzeyi
   (3 `hbmon_*` + 4 `bg_*` tool, `/bg` + `/bg-status` komutları).
 

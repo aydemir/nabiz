@@ -20,6 +20,13 @@ import { resolveHbmonBin, statusBuild, waitBuild, watchBuild } from "nabiz-core/
 
 // --- pi extension ---
 
+/**
+ * Tool kataloğu namespace'i: opencode yüzeyiyle birebir aynı ad
+ * (`options.namespace: "nabiz"`). pi bu alanı katalogda `## <name>` başlığı
+ * olarak render eder; tool adları (`bg_*`, `hbmon_*`) değişmez.
+ */
+const TOOL_NAMESPACE = { name: "nabiz" }
+
 const WatchParams = Type.Object({
   command: Type.Array(Type.String(), {
     description: "Build komutu argv dizisi, örn. ['cargo','build','--release']",
@@ -51,6 +58,7 @@ export default function (pi: ExtensionAPI) {
   const bin = resolveHbmonBin()
 
   pi.registerTool({
+    namespace: TOOL_NAMESPACE,
     name: "hbmon_watch",
     label: "hbmon watch",
     description:
@@ -75,6 +83,7 @@ export default function (pi: ExtensionAPI) {
   })
 
   pi.registerTool({
+    namespace: TOOL_NAMESPACE,
     name: "hbmon_wait",
     label: "hbmon wait",
     description:
@@ -91,6 +100,7 @@ export default function (pi: ExtensionAPI) {
   })
 
   pi.registerTool({
+    namespace: TOOL_NAMESPACE,
     name: "hbmon_status",
     label: "hbmon status",
     description:

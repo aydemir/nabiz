@@ -18,12 +18,12 @@
  * V2 notu: V1 `tool()` helper + dönen `tool` map'i → V2
  * `ctx.tool.transform(editor => editor.add(...))`. Şemalar JSON Schema,
  * execute `{ content }` döndürür. Tool adları aynı tutulur (LLM + test
- * uyumluluğu); namespace "build_pulse" (Faz 8; boşluk reddedilir —
+ * uyumluluğu); namespace "nabiz" (Faz 8; boşluk reddedilir —
  * NABIZ-011, host kuralı ^[A-Za-z0-9_-]{1,128}$).
  *
  * Faz 8: ToolContext (sessionID, agent, messageID, id, signal, progress)
  * tüm 7 tool'a bağlandı. signal → hbmon_wait/hbmon_status iptal;
- * progress → hbmon_wait ara-durum bildirimi. namespace "build_pulse".
+ * progress → hbmon_wait ara-durum bildirimi. namespace "nabiz".
  *
  * Disiplin: bm (`opencode-bm`) MCP'i söküldüğü için `DISCIPLINE_TEXT`'in
  * opencode karşılığı yanıtlara konur (BG_* sabitleri) — pi tarafındaki
@@ -50,7 +50,7 @@ import {
   releaseWake,
   resolveRecord,
   shellArgv,
-  wakeMessage,
+  wakeNotice,
   writeRecord,
 } from "nabiz-core/bg-tasks"
 import { formatProgress, readLastProgress } from "nabiz-core/progress"
@@ -78,6 +78,14 @@ interface ToolContext {
 }
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/
+
+/**
+ * 7 tool'ın namespace'i: MCP sunucusu ve plugin id ile aynı ad (`nabiz`),
+ * böylece TUI/ajan kataloğunda nabız yüzeyleri tek çatı altında toplanır.
+ * Ölçülen itiraz: ayrı ad (`build_pulse`) modelin kafasını karıştırıyor ve
+ * "hangi isim eski?" belirsizliği bırakıyordu (2026-10-05).
+ */
+const TOOL_NAMESPACE = "nabiz"
 
 /** Native push beklercisi dilimleri: daemon-side bloklu bekleme (polling değil). */
 const WAIT_SLICE_SEC = 50
@@ -206,7 +214,7 @@ function resolveWakeNodeBin(): string {
 async function pushOnSettle(
   bin: string,
   task: { uuid: string; sock: string; log: string; name: string; sessionID: string },
-  push: (text: string) => Promise<void>,
+  push: (notice: ReturnType<typeof wakeNotice>) => Promise<void>,
 ): Promise<void> {
   const dir = bgDir()
   const deadline = Date.now() + NATIVE_PUSH_MAX_WAIT_SEC * 1000
@@ -221,7 +229,7 @@ async function pushOnSettle(
     if (isTerminalState(state)) {
       if (!claimWake(dir, task.uuid)) return
       try {
-        await push(`${wakeMessage(task.name, state, code)} [wake:${task.uuid}]`)
+        await push(wakeNotice(task.name, state, code, task.uuid))
       } catch (e) {
         releaseWake(dir, task.uuid)
         console.error(`nabiz: native push BAŞARISIZ (bekçi devralır): ${e instanceof Error ? e.message : String(e)}`)
@@ -289,7 +297,7 @@ export default Plugin.define({
             },
             ["command"],
           ),
-          options: { namespace: "build_pulse" },
+          options: { namespace: TOOL_NAMESPACE },
           async execute(input) {
             const args = input as { command: string[]; uuid?: string; timeout_sec?: number }
             const w = await watchBuild(bin, args.command, {
@@ -324,7 +332,7 @@ export default Plugin.define({
             },
             ["sock"],
           ),
-          options: { namespace: "build_pulse" },
+          options: { namespace: TOOL_NAMESPACE },
           async execute(input, context) {
             const args = input as { sock: string; timeout?: number; until?: string }
             const signal = (context as ToolContext | undefined)?.signal
@@ -352,7 +360,7 @@ export default Plugin.define({
           description:
             "Sock'lu build'in anlık özeti (ağaç+metrik+sağlık). Hızlı yoklama, beklemez. hbmon_wait `woke_on=... state=running/stalled` dönerse detaya bununla bak.",
           input: obj({ sock: str("hbmon_watch'tan dönen sock") }, ["sock"]),
-          options: { namespace: "build_pulse" },
+          options: { namespace: TOOL_NAMESPACE },
           async execute(input, context) {
             const args = input as { sock: string }
             const signal = (context as ToolContext | undefined)?.signal
@@ -377,7 +385,7 @@ export default Plugin.define({
             },
             ["name", "command"],
           ),
-          options: { namespace: "build_pulse" },
+          options: { namespace: TOOL_NAMESPACE },
           async execute(input, context) {
             const args = input as { name: string; command: string; notify?: boolean; timeout_sec?: number }
             if (!NAME_RE.test(args.name)) {
@@ -451,8 +459,22 @@ export default Plugin.define({
                 // Native yol: süreç ayakta kaldığı sürece in-process bekleme +
                 // session.synthetic (inbox + execution.wake). Bekçi yalnız
                 // kalıcılık yedeği; claim marker'ı ikisini ayırır.
-                void pushOnSettle(bin, { uuid: h.uuid, sock: h.sock, log: h.log, name: args.name, sessionID }, (text) =>
-                  ctx.session.synthetic({ sessionID, text, delivery: "steer" }).then(() => undefined),
+                void pushOnSettle(
+                  bin,
+                  { uuid: h.uuid, sock: h.sock, log: h.log, name: args.name, sessionID },
+                  (notice) =>
+                    // `text` yalnız ajanın turn'üne gider; TUI ekrana `description`'ı
+                    // basar ve onu boş bulursa satırı hiç çizmez
+                    // (opencode v2 `routes/session/rows.ts:353`).
+                    ctx.session
+                      .synthetic({
+                        sessionID,
+                        text: notice.text,
+                        description: notice.description,
+                        metadata: notice.metadata,
+                        delivery: "steer",
+                      })
+                      .then(() => undefined),
                 )
                 lines.push(
                   `Uyandırma kuruldu: bitince bu oturumda yeni turn açılır (native synthetic + kalıcılık bekçisi).`,
@@ -478,7 +500,7 @@ export default Plugin.define({
           description:
             "Arka plan görevinin anlık özeti (compact). Beklemez ve bekleme aracı değildir — terminal bildirimi bekleniyorsa tekrar çağırma. id: name veya uuid-prefix.",
           input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
-          options: { namespace: "build_pulse" },
+          options: { namespace: TOOL_NAMESPACE },
           async execute(input, context) {
             const args = input as { id: string }
             const r = resolveRecord(bgDir(), args.id)
@@ -526,7 +548,7 @@ export default Plugin.define({
             },
             ["id"],
           ),
-          options: { namespace: "build_pulse" },
+          options: { namespace: TOOL_NAMESPACE },
           async execute(input, context) {
             const args = input as { id: string; tail_bytes?: number; offset?: number; wait_ms?: number }
             const r = resolveRecord(bgDir(), args.id)
@@ -605,7 +627,7 @@ export default Plugin.define({
           name: "bg_kill",
           description: "Arka plan görevini öldür (process group, TERM). id: name veya uuid-prefix.",
           input: obj({ id: str("Görev name veya uuid-prefix (bg_run'dan döner)") }, ["id"]),
-          options: { namespace: "build_pulse" },
+          options: { namespace: TOOL_NAMESPACE },
           async execute(input) {
             const args = input as { id: string }
             const r = resolveRecord(bgDir(), args.id)

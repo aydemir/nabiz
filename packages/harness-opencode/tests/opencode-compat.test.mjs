@@ -32,7 +32,7 @@ test("compat: tool adı kuralı host ile aynı", () => {
 })
 
 test("compat: namespace segment kuralı (nokta ayırıcı)", () => {
-  assert.ok("build_pulse".split(".").every((s) => NAMESPACE_SEGMENT_RE.test(s)))
+  assert.ok("nabiz".split(".").every((s) => NAMESPACE_SEGMENT_RE.test(s)))
   assert.ok("a.b".split(".").every((s) => NAMESPACE_SEGMENT_RE.test(s)))
   assert.ok(!"build pulse".split(".").every((s) => NAMESPACE_SEGMENT_RE.test(s)))
   assert.ok(
@@ -58,7 +58,7 @@ test("compat: assertValidToolName bozuk adı yüksek sesle reddeder", () => {
 })
 
 test("compat: assertValidNamespace sessiz-düşme girdilerini yakalar", () => {
-  assert.doesNotThrow(() => assertValidNamespace("build_pulse"))
+  assert.doesNotThrow(() => assertValidNamespace("nabiz"))
   assert.doesNotThrow(() => assertValidNamespace("a.b"))
   assert.throws(() => assertValidNamespace("build pulse"), CompatError)
   assert.throws(() => assertValidNamespace("a..b"), CompatError)
@@ -73,7 +73,7 @@ test("compat: adaptPermissionWord V1 sözcüğü V2'ye çevirir", () => {
 })
 
 test("compat: adaptToolInfo geçerli girdiyi aynen geçirir", () => {
-  const info = { name: "hbmon_watch", options: { namespace: "build_pulse" } }
+  const info = { name: "hbmon_watch", options: { namespace: "nabiz" } }
   assert.equal(adaptToolInfo(info), info)
 })
 

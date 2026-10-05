@@ -28,6 +28,7 @@ import {
   resolveRecord,
   shellArgv,
   wakeMessage,
+  wakeNotice,
   writeRecord,
 } from "nabiz-core/bg-tasks"
 import hbmonFactory from "../dist/plugins/opencode-hbmon.js"
@@ -392,10 +393,89 @@ process.stdout.write(JSON.stringify({ started: text.includes("Uyandırma kuruldu
   }
 })
 
+test("native push TUI'a görünür satır bırakır (description + metadata)", async () => {
+  // Canlı kanıt 2026-10-05: payload'ta `description` yokken opencode v2 TUI
+  // synthetic mesajı projection'a hiç almıyor (`routes/session/rows.ts:353`) —
+  // ajan uyanıyor, kullanıcı ekranda hiçbir şey görmüyor. Aynı kablolama,
+  // sahte hbmon `wait` çağrısına terminal yanıt verir (push anında düşer).
+  const dir = mkdtempSync(join(tmpdir(), "bg-notice-"))
+  const prevDir = process.env.HBMON_BG_DIR
+  const prevNode = process.env.NABIZ_WAKE_NODE
+  const handshake = { v: 1, ev: "ready", uuid: "not1", sock: join(dir, "n.sock"), log: join(dir, "n.jsonl") }
+  const terminal = { v: 1, ev: "exit", uuid: "not1", state: "done", code: 0, duration_sec: 0.1 }
+  const shim = writeNodeShim(
+    dir,
+    "hbmon",
+    `const a = process.argv[2]\nif (a === "watch") console.log(${JSON.stringify(
+      JSON.stringify(handshake),
+    )})\nelse console.log(${JSON.stringify(JSON.stringify(terminal))})\nprocess.exit(0)\n`,
+  )
+  process.env.HBMON_BG_DIR = dir
+  process.env.NABIZ_WAKE_NODE = "/bin/echo"
+  try {
+    const pluginEntry = join(import.meta.dirname, "..", "dist", "plugins", "opencode-hbmon.js")
+    const body = `
+const { default: factory } = await import(${JSON.stringify(pluginEntry)})
+const tools = []
+const calls = []
+const ctx = {
+  options: { bin: ${JSON.stringify(shim)} },
+  session: { hook: async () => {}, synthetic: async (a) => { calls.push(a); return {} } },
+  tool: { transform: async (cb) => cb({ add: (t) => tools.push(t) }) },
+}
+await factory.setup(ctx)
+const bgRun = tools.find((t) => t.name === "bg_run")
+await bgRun.execute({ name: "not1", command: "echo hi" }, { sessionID: "ses_n" })
+const deadline = Date.now() + 20000
+while (calls.length === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50))
+process.stdout.write(JSON.stringify(calls))
+// process.exit YOK: native beklerci bitince event loop kendiliğinden boşalmalı.
+`
+    const script = join(dir, "notice.mjs")
+    writeFileSync(script, body)
+    const res = await new Promise((resolve) => {
+      const child = spawn(process.execPath, [script], { stdio: ["ignore", "pipe", "pipe"] })
+      let out = ""
+      const timer = setTimeout(() => {
+        child.kill()
+        resolve({ code: -1, out })
+      }, 30000)
+      child.stdout.on("data", (c) => (out += c))
+      child.on("exit", (code) => {
+        clearTimeout(timer)
+        resolve({ code, out })
+      })
+    })
+    assert.equal(res.code, 0, `probe kendiliğinden çıkmalıydı: ${res.out.slice(0, 300)}`)
+    const calls = JSON.parse(res.out)
+    assert.equal(calls.length, 1, `tek synthetic push bekleniyordu: ${res.out.slice(0, 300)}`)
+    assert.equal(calls[0].delivery, "steer")
+    assert.match(calls[0].text, /^\[bg\] not1 → done \(exit 0\)\. bg_status\/bg_logs ile detaya bak\. \[wake:not1\]$/)
+    assert.equal(calls[0].description, "not1 → done (exit 0)")
+    assert.deepEqual(calls[0].metadata, { source: "shell", jobID: "not1", state: "completed" })
+  } finally {
+    if (prevDir === undefined) delete process.env.HBMON_BG_DIR
+    else process.env.HBMON_BG_DIR = prevDir
+    if (prevNode === undefined) delete process.env.NABIZ_WAKE_NODE
+    else process.env.NABIZ_WAKE_NODE = prevNode
+  }
+})
+
 test("outFromSock + wakeMessage", () => {
   assert.equal(outFromSock("/tmp/hbmon-a.sock"), "/tmp/hbmon-a.out")
   assert.match(wakeMessage("derle", "done", 0), /\[bg\] derle → done \(exit 0\)/)
   assert.match(wakeMessage("derle", "failed", undefined), /exit \?/)
+})
+
+test("wakeNotice: description dolu + metadata (TUI satırı için)", () => {
+  const done = wakeNotice("derle", "done", 0, "u1")
+  assert.match(done.text, /^\[bg\] derle → done \(exit 0\)\. bg_status\/bg_logs ile detaya bak\. \[wake:u1\]$/)
+  assert.equal(done.description, "derle → done (exit 0)")
+  assert.deepEqual(done.metadata, { source: "shell", jobID: "u1", state: "completed" })
+  assert.equal(wakeNotice("derle", "failed", 2, "u2").metadata.state, "error")
+  assert.equal(wakeNotice("derle", "dep_missing", undefined, "u3").metadata.state, "error")
+  assert.equal(wakeNotice("derle", "killed", undefined, "u4").metadata.state, "cancelled")
+  assert.equal(wakeNotice("derle", "running", undefined, "u5").description, "derle → running")
 })
 
 test("readLastEvent: jsonl kuyruğundan terminal olay (daemon-ölü fallback)", () => {
@@ -634,6 +714,39 @@ function readAttempts(dir) {
 function readState(statePath) {
   return JSON.parse(readFileSync(statePath, "utf8"))
 }
+
+test("bg-wake: terminal olay loglanır (claim yapılandırması olsa da)", async () => {
+  // Canlı kanıt 2026-10-05: başarılı enjeksiyonda bile wake log boş
+  // kalıyordu — teşhis (native mi bekçi mi kazandı) 3 tur sürdü.
+  const f = await makeFakeOpencode("idle")
+  const r = await runWake(f.dir, f.sockBase, "t-log")
+  assert.equal(r.code, 0)
+  assert.match(r.stdout, /bg-wake: terminal done code=0/)
+})
+
+test("bg-wake: native push grace penceresinde claim alırsa enjeksiyon yapılmaz", async () => {
+  // Claim yarışı ölçümü (2026-10-05): 4 koşuda bekçi 3, native 1 kazandı.
+  // Bekçi artık claim'den önce native grace penceresini bekliyor.
+  const f = await makeFakeOpencode("idle")
+  const claim = join(f.dir, "bg-grace1.wake.claim")
+  const native = spawn(process.execPath, [
+    "-e",
+    `setTimeout(() => require("fs").writeFileSync(${JSON.stringify(claim)}, ""), 400)`,
+  ])
+  const r = await runWake(f.dir, f.sockBase, "t-grace", [
+    "--claim-dir",
+    f.dir,
+    "--claim-uuid",
+    "grace1",
+    "--native-grace-ms",
+    "3000",
+  ])
+  native.kill()
+  assert.equal(r.code, 0)
+  assert.match(r.stdout, /native grace 3000ms bekleniyor/)
+  assert.match(r.stdout, /native push devraldı/)
+  assert.equal(readState(f.statePath).runs, 0, "native claim aldıysa `opencode run` çağrılmamalı")
+})
 
 test("adapter: idle → injection → turn = wake=confirmed", async () => {
   const f = await makeFakeOpencode("idle")

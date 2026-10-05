@@ -9,7 +9,7 @@ bash-tools sunucusu. Tek giriş noktası `../plugin/index.ts` (bundle, id `nabiz
   terminal bildirimi **native**: `pushOnSettle` → `session.synthetic`
   (inbox + `execution.wake`); `bg-wake.mjs` yalnız kalıcılık yedeği, ikisi
   `claimWake` marker'ıyla ayrılır. `bg_logs(wait_ms)` bloklayan okuma.
-  hepsi `options.namespace: "build_pulse"` (host kuralı: segment `^[A-Za-z0-9_-]{1,64}$`).
+  hepsi `options.namespace: "nabiz"` (host kuralı: segment `^[A-Za-z0-9_-]{1,64}$`).
 - `opencode-context-saver.ts` — `session.hook("context")` + `tool.execute.before/after`
   ile bağlam kırpması; `session.hook("prompt")` boş kanca.
 - `opencode-build-tracker.ts` — `execute.before/after` ile build izleme.

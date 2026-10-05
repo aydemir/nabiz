@@ -249,6 +249,36 @@ export function wakeMessage(name: string, state: string, code: number | undefine
 }
 
 /**
+ * hbmon terminal state → TUI `metadata.state` değeri (satırın ikonunu ve
+ * rengini seçer: `completed` `↳`, `error` `!` + kırmızı, `cancelled` sarı).
+ */
+function noticeState(state: string): "completed" | "error" | "cancelled" {
+  if (state === "done") return "completed"
+  if (state === "killed" || state === "cancelled" || state === "timeout") return "cancelled"
+  return "error"
+}
+
+/**
+ * Native push payload'ı (`session.synthetic`).
+ *
+ * `text` ajanın okuduğu satır. `description` ise TUI'nin EKRANA BASDIĞI
+ * alan ve boş bırakılırsa mesaj tamamen kaybolur: opencode v2 synthetic
+ * mesajı `description` boşken projection'a almıyor
+ * (`routes/session/rows.ts:353` — `!message.description?.trim()`), yani
+ * ajan uyansa bile kullanıcı hiçbir şey görmüyor. `metadata.source: "shell"`
+ * satırı sade bir notice yerine `↳ Shell finished · <description>` biçimine
+ * çevirir (`routes/session/index.tsx:1953`).
+ */
+export function wakeNotice(name: string, state: string, code: number | undefined, uuid: string) {
+  const exit = code === undefined ? "" : ` (exit ${code})`
+  return {
+    text: `${wakeMessage(name, state, code)} [wake:${uuid}]`,
+    description: `${name} → ${state}${exit}`,
+    metadata: { source: "shell", jobID: uuid, state: noticeState(state) },
+  }
+}
+
+/**
  * Push claim marker dosyası — native (plugin içi `session.synthetic`) ve
  * detached bekçi (`scripts/bg-wake.mjs`) yollarının yarış çözücüsü.
  *

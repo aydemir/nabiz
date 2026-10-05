@@ -54,6 +54,13 @@ import { Type } from "typebox"
 // tek-dosya ~/.pi — core sidecar tasarımından farklı), wait döngüsü (NABIZ-003).
 import { createOffsetTracker, formatCursorReceipt, outFromSock, type OffsetTracker } from "nabiz-core/bg-tasks"
 
+/**
+ * Tool kataloğu namespace'i: opencode yüzeyiyle birebir aynı ad
+ * (`options.namespace: "nabiz"`). pi bu alanı katalogda `## <name>` başlığı
+ * olarak render eder; tool adları (`bg_*`, `hbmon_*`) değişmez.
+ */
+const TOOL_NAMESPACE = { name: "nabiz" }
+
 // --- upstream common.ts'tan aynen alınan sabitler/yardımcılar ---
 
 const MAX_LOG_BYTES = 50 * 1024
@@ -825,6 +832,7 @@ export default function (pi: ExtensionAPI) {
   })
 
   pi.registerTool({
+    namespace: TOOL_NAMESPACE,
     name: "bg_run",
     label: "Background Run",
     description: `Start a named long-running shell command in the background and return immediately with a task ID and output  By default, completed/failed/killed terminal state is delivered automatically as <background-task-notification> and starts a follow-up agent turn; do not sleep or poll merely to wait. Output is written to the hbmon .out file and model-visible logs are bounded to ${formatSize(MAX_LOG_BYTES)}.`,
@@ -903,6 +911,7 @@ export default function (pi: ExtensionAPI) {
   })
 
   pi.registerTool({
+    namespace: TOOL_NAMESPACE,
     name: "bg_status",
     label: "Background Status",
     description:
@@ -922,6 +931,7 @@ export default function (pi: ExtensionAPI) {
   })
 
   pi.registerTool({
+    namespace: TOOL_NAMESPACE,
     name: "bg_logs",
     label: "Background Logs",
     description: `Read bounded output from a background task for deliberate inspection. Output is capped at ${formatSize(MAX_LOG_BYTES)} for model safety and points to the full output file when truncated. Artımlı okuma için offset ver (önceki yanıtın next_offset'i); aynı offset tekrarı uyarı döndürür. wait_ms>0 verilirse bloklayan okuma yapar: yeni çıktı veya terminal durum gelene kadar en fazla wait_ms bekler (cap 30000); mevcut çıktı/terminal varsa hemen döner, yoksa effective_wait_ms + timed_out raporlanır.`,
@@ -1051,6 +1061,7 @@ export default function (pi: ExtensionAPI) {
   })
 
   pi.registerTool({
+    namespace: TOOL_NAMESPACE,
     name: "bg_kill",
     label: "Background Kill",
     description: "Stop a running background task by ID. Fails loudly if the task is unknown or already finished.",
