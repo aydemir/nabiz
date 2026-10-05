@@ -25,13 +25,14 @@
   "license": "MIT",
   "dependencies": {
     "@opencode/plugin": "2.0.23",
-    "nabiz-core": "*"
+    "nabiz-core": "^1.0.0"
   },
   "engines": {
     "node": ">=18"
   },
   "exports": {
-    "./server": "./dist/plugins/server.js",
+    ".": "./dist/plugin/index.js",
+    "./server": "./dist/plugin/index.js",
     "./opencode-build-tracker": "./dist/plugins/opencode-build-tracker.js",
     "./opencode-context-saver": "./dist/plugins/opencode-context-saver.js",
     "./opencode-truncation-noticer": "./dist/plugins/opencode-truncation-noticer.js",

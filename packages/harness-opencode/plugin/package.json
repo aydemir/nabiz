@@ -1,7 +1,7 @@
 {
   "name": "nabiz-opencode",
   "version": "1.0.0",
-  "description": "nabiz opencode plugin paketi (V2): altı plugin tek entrypoint'te",
+  "description": "nabiz opencode plugin paketi (V2): yedi plugin tek entrypoint'te",
   "type": "module",
   "license": "MIT"
 }
