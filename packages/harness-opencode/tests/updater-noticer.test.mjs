@@ -20,6 +20,7 @@ import {
   checkForUpdate,
   compareVersions,
   createRegistryFetcher,
+  DEFAULT_TIMEOUT_MS,
   formatSummary,
   isOutdated,
   UPDATE_SENTINEL,
@@ -188,6 +189,33 @@ test("plugin: sentinel zaten varsa tekrar kontrol edilmiyor", async () => {
     const { sessionHooks } = await setupV2(UpdaterPlugin, {})
     await sessionContext(sessionHooks, [`${UPDATE_SENTINEL} önceki oturumdan`])
     assert.equal(calls, 0)
+  } finally {
+    globalThis.fetch = original
+  }
+})
+
+test("createRegistryFetcher: varsayılan timeout ölçülen soğuk isteği kesmemeli (regresyon)", () => {
+  // Canlı ölçüm 2026-10-05: registry'ye ilk `fetch` (DNS + TLS) ~5.4 sn sürdü.
+  // 5 sn'lik timeout onu AbortError ile kesiyor, `catch` yutup `undefined`
+  // dönüyor ve `checkForUpdate` bunu "güncelleme yok" sayıyordu — yani paket
+  // registry'de olmasına rağmen updater sessizce hiç bildirim vermiyordu.
+  // Yukarıdaki fetcher testlerinin hepsi `fetch`'i ANINDA stub'ladığı için bu
+  // eşik hiç ölçülmemişti; burada sabitleniyor.
+  assert.ok(
+    DEFAULT_TIMEOUT_MS >= 10_000,
+    `varsayılan timeout ${DEFAULT_TIMEOUT_MS}ms; ölçülen soğuk istek ~5.4 sn, onun üstünde olmalı`,
+  )
+})
+
+test("createRegistryFetcher: explicit timeout aşılınca sessiz undefined (fail-quiet)", async () => {
+  const original = globalThis.fetch
+  globalThis.fetch = async (...args) =>
+    await new Promise((_resolve, reject) => {
+      args[1].signal.addEventListener("abort", () => reject(new Error("aborted")))
+    })
+  try {
+    const fetcher = createRegistryFetcher("nabiz-opencode", "https://registry.npmjs.org", 5)
+    assert.equal(await fetcher(), undefined)
   } finally {
     globalThis.fetch = original
   }

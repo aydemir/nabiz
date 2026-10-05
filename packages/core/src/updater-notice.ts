@@ -18,7 +18,14 @@ export const UPDATE_SENTINEL = "[nabiz-updater]"
 
 export const DEFAULT_PACKAGE = "nabiz-opencode"
 export const DEFAULT_REGISTRY = "https://registry.npmjs.org"
-export const DEFAULT_TIMEOUT_MS = 5_000
+/**
+ * Registry soğuk istek süresi 2026-10-05'te ölçüldü: ilk `fetch` (DNS+TLS)
+ * **~5.4 sn** sürüyor. 5 sn'lik timeout onu kesiyor, `catch` AbortError'ı
+ * yutuyor ve fetcher `undefined` dönüyor — updater "güncelleme yok" diye
+ * sessizce geçiyor. Ölçülen 5.4 sn'in üstünde, üstelik bu istek oturumda
+ * **bir kez** çalıştığı için 15 sn rahatlıkla katlanır.
+ */
+export const DEFAULT_TIMEOUT_MS = 15_000
 
 /**
  * Sürüm karşılaştırma. `a > b` ise pozitif, eşitse 0, küçükse negatif.
