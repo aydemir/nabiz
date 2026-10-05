@@ -1,6 +1,7 @@
 {
   "name": "nabiz",
   "version": "1.0.0",
+  "private": true,
   "description": "Keeps the pulse of long-running work: build tracking, background tasks, notifications",
   "type": "module",
   "keywords": [
