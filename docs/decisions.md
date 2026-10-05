@@ -113,3 +113,28 @@ genişliği kaynaklıydı (120 sütun taşması: inline tip nesnesi, uzun ternar
 argüman listesi) — anlamsal değişiklik yok; `format:check` artık tüm
 kapsamda temiz, dolayısıyla kapılar (build/lint/typecheck/pi-check/test)
 tek komutla yeşil | SUPERSEDES: none
+
+[2026-10-05 04:05] DECISION: native push payload'ına `description` + `metadata`
+eklendi, bekçi claim yarışına grace penceresi verildi, tool namespace'i
+`build_pulse` → `nabiz` | REASON: üç ayrı canlı gözlem. (1) TUI synthetic
+mesajı `description` boşken projection'a hiç almıyor
+(`routes/session/rows.ts:353`), yani ajan uyanıyor, kullanıcı hiçbir şey
+görmüyordu; `text` yalnız ajana gidiyor. `metadata.source:"shell"` ise satırı
+`↳ Shell finished · <desc>` biçimine çeviriyor. (2) Bekçi ile native push
+terminal olayda claim'a yarışıyordu ve ölçümde 4 koşunun 3'ünü bekçi
+kazanıyordu (bekçi kazanınca bildirim `opencode run` prompt'u olarak düşüyor,
+notice değil); bekçi artık claim'den önce `--native-grace-ms` (varsayılan
+1500) bekliyor, native çalışmıyorsa yine devralıyor. (3) Ayrı isimli
+namespace modelin kafasını karıştırıyordu: plugin id ve MCP sunucusu zaten
+`nabiz` iken 7 tool `build_pulse` altındaydı; pi tarafı da aynı ada alındı
+(pi `## <name>` başlığı render ediyor). Ayrıca başarılı enjeksiyonda wake log
+boş kalıyordu — terminal satırı artık koşulsuz loglanıyor | SUPERSEDES: none
+
+[2026-10-05 04:05] OPERASYONEL: plugin kodu değişiklikleri `/reload` ile
+gelmiyor — `opencode serve` saatlerce ayakta kalıyor (PPID 1) ve plugin
+modülünü süreç içi önbellekte tutuyor; log "loading plugin" dese de eski
+modülü kullanıyor. Ölçüm: kurulum 03:20:58, reload 03:25:49, canlı kayıt
+yine `build_pulse`, sunucu ömrü 6804 sn. Gerçek değişiklik için sunucu
+sürecini yeniden başlat (`pkill -f "opencode serve"`; TUI otomatik açmazsa
+`opencode` ile bir kez daha başlat). TUI restart'ı ve `/reload` yetmiyor |
+SUPERSEDES: none
