@@ -1,6 +1,6 @@
 {
   "name": "nabiz-core",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "nabiz paylasilan motoru: host-bagimsiz saf TS (hbmon client, bg-tasks, prune, notice/disclosure metinleri). opencode/pi importu YASAK.",
   "scripts": {
