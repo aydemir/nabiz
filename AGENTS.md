@@ -11,7 +11,7 @@ uyarlanmış halidir; çelişki yok, yalnızca toolchain farkı var.
 - `npm run format` / `format:check` — prettier (`semi: false`, `printWidth: 120`).
 - `npm run lint` — oxlint, tüm repo (`oxlint .`, 0 warning hedefi).
 - `npm run typecheck:ext` — `extensions/` için `tsc --noEmit`
-  (pi 1.0.x tiplerine karşı; `tsconfig.extensions.json`).
+  (pi 1.x tiplerine karşı; `tsconfig.extensions.json`).
 - `npm run check:pi` — pi uyumluluk kapısı: extension'ları pi'nin kendi
   jiti'siyle yükler, tool/komut sözleşmesini doğrular
   (`scripts/check-pi-ext.mjs`).

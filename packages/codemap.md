@@ -10,3 +10,6 @@ npm-workspaces monorepo paketleri.
 ## Integration
 - Workspace linkleri symlink'tir (`node_modules/nabiz-core` → `packages/core`);
   Windows'ta symlink yetkisi gerekir (NABIZ-006).
+- Registry: `nabiz-core` ve `nabiz-opencode` npm'de yayında
+  (`npm install nabiz-core` / `npm install nabiz-opencode`); kök paket
+  `private:true` — yanlışlıkla monorepo yayını engellenir.

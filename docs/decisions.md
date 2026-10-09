@@ -114,6 +114,8 @@ argüman listesi) — anlamsal değişiklik yok; `format:check` artık tüm
 kapsamda temiz, dolayısıyla kapılar (build/lint/typecheck/pi-check/test)
 tek komutla yeşil | SUPERSEDES: none
 
+## 2026-10-05
+
 [2026-10-05 04:05] DECISION: native push payload'ına `description` + `metadata`
 eklendi, bekçi claim yarışına grace penceresi verildi, tool namespace'i
 `build_pulse` → `nabiz` | REASON: üç ayrı canlı gözlem. (1) TUI synthetic
@@ -138,3 +140,37 @@ yine `build_pulse`, sunucu ömrü 6804 sn. Gerçek değişiklik için sunucu
 sürecini yeniden başlat (`pkill -f "opencode serve"`; TUI otomatik açmazsa
 `opencode` ile bir kez daha başlat). TUI restart'ı ve `/reload` yetmiyor |
 SUPERSEDES: none
+
+[2026-10-05 20:10] DECISION: pi 1.0.3'e hizalandı — devDep
+`@earendil-works/pi-coding-agent` `^1.0.2` → `^1.0.3`; extension kodu DEĞİŞMEDİ
+(tek satır paket sürümü + `extensions/codemap.md` pin'i) | REASON: 1.0.2 →
+1.0.3 arasında `dist/core/extensions/types.d.ts` **birebir aynı** (1719 satır,
+diff boş) — `ExtensionAPI`/`ExtensionContext` yüzeyi, `registerTool` /
+`registerCommand` / `on` imzaları ve `ctx.cwd|hasUI|ui` değişmedi. `.d.ts`
+farkları yalnız üç yerde: `config.d.ts` (yeni `detectInstallChange()` +
+`InstallChange`, #10439 kurulum-değişimi tespiti), `core/keybindings.d.ts`
+(home/end varsayılan tuş atamaları), `interactive-mode.d.ts` (restart uyarısı
+alanı) — üçü de nabız'ın dokunmadığı yüzeyler. Çalışma zamanı farkları da
+ilgisiz: `bash-executor`, `output-accumulator`, `mcp/tools`, `codemode/*` ve
+CLI bundle'ı. Kapılar 1.0.3 altında yeşil: `typecheck:ext` temiz, `check-pi`
+"pi uyumluluk OK (pi 1.0.3, 2 extension)", `lint` 0/0, `format:check` temiz.
+`check-pi-ext.mjs` sürümü `package.json`'dan okuyup raporluyor, sabit pin
+içermiyor — yani sonraki pi sürümlerinde kapı kendiliğinden güncel kanıt verir
+| SUPERSEDES: none
+
+## 2026-10-09
+
+[2026-10-09 16:18] DECISION: pi 1.1.0'a hizalandı — devDep
+`@earendil-works/pi-coding-agent` `^1.0.3` → `^1.1.0`; extension kodu DEĞİŞMEDİ
+(tek satır paket sürümü + `extensions/codemap.md` pin'i) | REASON: 1.0.3 →
+1.1.0 arasında extension loader (`dist/extensions/index.js` + `.d.ts`,
+`core/extensions/*`) **byte-identical** (diff 0 satır); herkese açık tip
+farkları yalnız ekleme: `defaultToolModifiers?`, render context'e `durationMs` /
+`outputPad`, `tool_execution_end`'e opsiyonel `durationMs` (`aborted` 1.0.3'te
+zaten vardı). Kaldırılan iki satır da `private` sınıf alanı
+(`_allowedToolNames` / `_excludedToolNames` → `_allowedTools` /
+`_excludedTools`, iç yeniden adlandırma — extension yüzeyine kapalı).
+`session_start` / `session_shutdown` emit noktaları iki sürümde de aynı —
+nabiz'in dinlediği tek event'ler bunlar (`bg-hbmon.ts:779,819`), yeni alanlara
+dokunulmuyor. Kapılar 1.1.0 altında yeşil: `typecheck:ext` temiz, `check-pi`
+"pi uyumluluk OK (pi 1.1.0, 2 extension)" | SUPERSEDES: none

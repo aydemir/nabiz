@@ -50,6 +50,17 @@ npm install && npm run build
 # Ön-kontrol (kurulumdan önce): node scripts/check-symlink.mjs
 ```
 
+## Paketler
+
+npm registry'de yayında (registry kurulumu doğrulandı, git gerekmez):
+
+- [`nabiz-core`](https://www.npmjs.com/package/nabiz-core) — paylaşılan
+  host-bağımsız motor (hbmon istemcisi, bg-tasks, prune, progress,
+  notice/disclosure metinleri). `npm install nabiz-core`
+- [`nabiz-opencode`](https://www.npmjs.com/package/nabiz-opencode) — opencode
+  adaptörü (`plugin/` bundle ile 6 plugin + MCP `nabiz_safe`/`nabiz_raw`).
+  `npm install nabiz-opencode`
+
 ## Gereksinim
 
 - `hbmon` ikiliği (`~/.cargo/bin/hbmon` veya `PATH`'te). Bulunamazsa extension'lar
@@ -64,5 +75,5 @@ aynı handshake, aynı `woke_on` özetleri, aynı exit eşlemesi
 `bg_*` için canlı daemon smoke (cursor / registry / `wait_ms`).
 
 Kapılar: `npm run lint` (oxlint, tüm repo), `npm run typecheck:ext` +
-`npm run check:pi` (pi 1.0.x uyumluluğu), `packages/harness-opencode` içinden
+`npm run check:pi` (pi 1.x uyumluluğu), `packages/harness-opencode` içinden
 `npm test` (kökten düşük bellekli koşum: `npm run test:lowmem`).
